@@ -247,6 +247,9 @@ input.code-inp:focus{border-color:#60a5fa}
   min-height:70px;display:flex;flex-direction:column;align-items:center;justify-content:center;
 }
 .sc:active,.sc.act{background:rgba(232,200,122,.15);border-color:var(--gold);transform:scale(.95)}
+.sc.voice-only{border-color:rgba(168,85,247,.4);background:rgba(168,85,247,.06)}
+.sc.voice-only:active{background:rgba(168,85,247,.15)}
+@keyframes shake{0%{transform:translateX(0)}20%{transform:translateX(-6px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(4px)}100%{transform:translateX(0)}}
 .sc.disabled{opacity:.3;pointer-events:none}
 .sc.secret{border-color:rgba(255,100,200,.4);background:rgba(255,100,200,.06)}
 .si{font-size:22px;margin-bottom:3px}
@@ -440,20 +443,31 @@ input.code-inp:focus{border-color:#60a5fa}
 
 <script>
 const PATHS={
-  destructor:{name:'Destructor',icon:'💥',color:'#f87171',desc:'Daño puro.',bonus:'+30% daño',spells:['stupefy','avada','expelliarmus','crucio']},
-  guardian:  {name:'Guardián',  icon:'🛡️',color:'#60a5fa',desc:'Defensa total.',bonus:'Curación +60%',spells:['protego','lumos','expelliarmus','aguamenti']},
-  trickster: {name:'Trickster', icon:'🎭',color:'#c084fc',desc:'Caos y engaño.',bonus:'Hechizos ocultos',spells:['confundo','expelliarmus','stupefy','sectum']},
+  destructor:{name:'Destructor',icon:'💥',color:'#f87171',desc:'Daño puro.',bonus:'+30% daño',
+    spells:['aturdir','destruir','expulsar','quemar'],
+    basicSpells:['aturdir','expulsar'],
+  },
+  guardian:  {name:'Guardián',  icon:'🛡️',color:'#60a5fa',desc:'Defensa total.',bonus:'Curación +60%',
+    spells:['escudo','sanar','expulsar','restaurar'],
+    basicSpells:['escudo','sanar'],
+  },
+  trickster: {name:'Trickster', icon:'🎭',color:'#c084fc',desc:'Caos y engaño.',bonus:'Hechizos ocultos',
+    spells:['confundir','expulsar','aturdir','desgarrar'],
+    basicSpells:['confundir','expulsar'],
+  },
 };
 const SPELLS={
-  stupefy:      {name:'Stupefy',    icon:'⚡',dmg:25,heal:0,  kw:['stupefy','stupe']},
-  expelliarmus: {name:'Expelliar.', icon:'💥',dmg:20,heal:0,  kw:['expelliarmus','expeli']},
-  lumos:        {name:'Lumos',      icon:'🌟',dmg:0, heal:20, kw:['lumos']},
-  protego:      {name:'Protego',    icon:'🛡️',dmg:0, heal:0,shield:true,kw:['protego']},
-  avada:        {name:'Avada K.',   icon:'💀',dmg:45,heal:0,  kw:['avada','kedavra']},
-  crucio:       {name:'Crucio',     icon:'🔥',dmg:35,heal:0,  kw:['crucio']},
-  aguamenti:    {name:'Aguamenti',  icon:'💧',dmg:0, heal:30, kw:['aguamenti','agua']},
-  confundo:     {name:'Confundo',   icon:'🌀',dmg:15,heal:0,stun:true,kw:['confundo']},
-  sectum:       {name:'Sectum',     icon:'🗡️',dmg:40,heal:0,  kw:['sectum'],secret:true},
+  // ── BÁSICOS — disponibles con clic y voz ──────────────────────────────────
+  aturdir:   {name:'Aturdir',   icon:'⚡',dmg:25,heal:0,   kw:['aturdir','aturde','aturdece']},
+  expulsar:  {name:'Expulsar',  icon:'💥',dmg:20,heal:0,   kw:['expulsar','expulsa','expulso']},
+  sanar:     {name:'Sanar',     icon:'🌟',dmg:0, heal:20,  kw:['sanar','sana','cura','curar']},
+  escudo:    {name:'Escudo',    icon:'🛡️',dmg:0, heal:0,shield:true, kw:['escudo','proteger','protege']},
+  // ── PODEROSOS — solo voz ──────────────────────────────────────────────────
+  destruir:  {name:'Destruir',  icon:'💀',dmg:45,heal:0,   kw:['destruir','destruye','destrucción'],voiceOnly:true},
+  quemar:    {name:'Quemar',    icon:'🔥',dmg:35,heal:0,   kw:['quemar','quema','fuego'],voiceOnly:true},
+  restaurar: {name:'Restaurar', icon:'💧',dmg:0, heal:30,  kw:['restaurar','restaura','restauro'],voiceOnly:true},
+  confundir: {name:'Confundir', icon:'🌀',dmg:15,heal:0,stun:true, kw:['confundir','confunde','confundo'],voiceOnly:true},
+  desgarrar: {name:'Desgarrar', icon:'🗡️',dmg:40,heal:0,   kw:['desgarrar','desgarra','desgarro'],voiceOnly:true,secret:true},
 };
 const LEVEL_META=[
   {n:1,name:'Novato',   color:'#4ade80',icon:'🌱'},
@@ -735,13 +749,21 @@ socket.on('duel_start',({yourIndex,yourLevel,oppLevel,oppName,oppAvatar})=>{
 function renderSpells(){
   document.getElementById('sgrid').innerHTML=PATHS[G.selectedPath].spells.map(sk=>{
     const s=SPELLS[sk];
-    return `<div class="sc${s.secret?' secret':''}" data-spell="${sk}" onclick="clickSpell('${sk}')">
-      ${s.secret?'<div class="sbadge">OCULTO</div>':''}
-      <div class="si">${s.icon}</div><div class="sn">${s.name}</div>
+    const isVoiceOnly=s.voiceOnly;
+    const isSecret=s.secret;
+    return `<div class="sc${isVoiceOnly?' voice-only':''}${isSecret?' secret':''}"
+      data-spell="${sk}"
+      onclick="clickSpell('${sk}')"
+      title="${isVoiceOnly?'Solo voz 🎤':'Clic o voz'}">
+      ${isSecret?'<div class="sbadge">OCULTO</div>':''}
+      ${isVoiceOnly?'<div class="sbadge" style="background:#a855f7">🎤</div>':''}
+      <div class="si">${s.icon}</div>
+      <div class="sn">${s.name}</div>
       ${s.dmg>0?`<div class="sdmg">-${s.dmg}</div>`:''}
       ${s.heal>0?`<div class="sheal">+${s.heal}</div>`:''}
       ${s.shield?'<div class="sheal">Escudo</div>':''}
       ${s.stun?'<div class="sdmg">Aturde</div>':''}
+      ${isVoiceOnly?'<div style="font-size:8px;color:#a855f7;font-family:Cinzel,serif;margin-top:2px">SOLO VOZ</div>':''}
     </div>`;
   }).join('');
 }
@@ -751,7 +773,18 @@ function setSpellsDisabled(d){
 }
 function clickSpell(sk){
   if(!G.myTurn||G.counterActive)return;
-  playSound(sk);
+  const s=SPELLS[sk];
+  if(s && s.voiceOnly){
+    // shake the card to signal it needs voice
+    const card=document.querySelector(`[data-spell="${sk}"]`);
+    if(card){
+      card.style.animation='shake .4s ease';
+      setTimeout(()=>card.style.animation='',500);
+    }
+    addLog('🎤 Este hechizo solo se activa con la voz','ms');
+    return;
+  }
+  playSound(spellSoundKey(sk));
   socket.emit('cast_spell',{spell:sk});
   document.getElementById('psp').classList.add('casting');
   setTimeout(()=>document.getElementById('psp').classList.remove('casting'),600);
@@ -796,7 +829,7 @@ socket.on('spell_result',({caster,spell,effect,dmg,heal})=>{
   showSfx(s.icon);
   const isMe=caster===G.myIndex;
   if(effect==='attack'){
-    if(!isMe)playSound(spell);
+    if(!isMe)playSound(spellSoundKey(spell));
     playSound('hit');
     document.getElementById(isMe?'esp':'psp').classList.add('hit');
     setTimeout(()=>document.getElementById(isMe?'esp':'psp').classList.remove('hit'),500);
@@ -805,7 +838,7 @@ socket.on('spell_result',({caster,spell,effect,dmg,heal})=>{
     if(!isMe)playSound('protego');
     addLog(isMe?'🛡️ ¡Protego! Escudo activo.':'⚔️ El rival activa Protego.','sc2');
   }else if(effect==='heal'){
-    if(!isMe)playSound(spell);
+    if(!isMe)playSound(spellSoundKey(spell));
     if(isMe){G.myHP=Math.min(100,G.myHP+heal);addLog(`🌟 +${heal} HP`,'hl');}
     else{G.oppHP=Math.min(100,G.oppHP+heal);addLog(`🌟 El rival se cura ${heal} HP`,'hl');}
     updateBars();
@@ -1444,6 +1477,15 @@ socket.on('avatar_updated',profile=>{
   setLobbyMsg('¡Avatar actualizado!','ok');
   setTimeout(()=>setLobbyMsg('',''),2000);
 });
+
+// Map new Spanish spell keys to audio engine sound names
+function spellSoundKey(sk){
+  return {
+    aturdir:'stupefy', expulsar:'expelliarmus', sanar:'lumos', escudo:'protego',
+    destruir:'avada',  quemar:'crucio',         restaurar:'aguamenti',
+    confundir:'confundo', desgarrar:'sectum',
+  }[sk] || sk;
+}
 
 function isVoice(){return !!(window.SpeechRecognition||window.webkitSpeechRecognition);}
 </script>
