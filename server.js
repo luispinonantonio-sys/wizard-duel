@@ -236,7 +236,9 @@ function makeRoomState() {
 
 // Emit turn_change with a fresh shuffled spell order and cast deadline
 function emitTurnChange(code, room, io) {
+  if (!rooms[code]) return; // room may have been deleted
   const pi = room.state.turn;
+  if (!room.sockets[pi]) return; // player offline, skip until reconnect
   const playerPath = room.state.players[pi].path;
   const PATH_SPELLS = {
     destructor: ['aturdir','destruir','expulsar','quemar'],
@@ -444,22 +446,30 @@ io.on('connection', socket => {
     emitTurnChange(code, room, io);
 
     // Send each player their own index + opponent info
-    room.sockets[0].emit('duel_start', {
-      yourIndex: 0,
-      yourLevel: calcLevel(p0.xp).n,
-      oppLevel: calcLevel(p1.xp).n,
-      oppName: socket.username,
-      oppAvatar: p1 ? (p1.avatar||'🧙‍♀️') : '🧙‍♀️',
-      state: room.state,
-    });
-    room.sockets[1].emit('duel_start', {
-      yourIndex: 1,
-      yourLevel: calcLevel(p1.xp).n,
-      oppLevel: calcLevel(p0.xp).n,
-      oppName: room.state.players[0].username,
-      oppAvatar: p0 ? (p0.avatar||'🧙') : '🧙',
-      state: room.state,
-    });
+    // Guard against null sockets (player may have briefly disconnected while waiting)
+    if (room.sockets[0]) {
+      room.sockets[0].emit('duel_start', {
+        yourIndex: 0,
+        yourLevel: calcLevel(p0.xp).n,
+        oppLevel: calcLevel(p1.xp).n,
+        oppName: socket.username,
+        oppAvatar: p1 ? (p1.avatar||'🧙‍♀️') : '🧙‍♀️',
+        state: room.state,
+      });
+    } else {
+      // Player 0 disconnected — they'll receive duel_start when they reconnect
+      console.log(`[${INSTANCE_ID}] Player 0 offline when duel started in room ${code} — will receive on reconnect`);
+    }
+    if (room.sockets[1]) {
+      room.sockets[1].emit('duel_start', {
+        yourIndex: 1,
+        yourLevel: calcLevel(p1.xp).n,
+        oppLevel: calcLevel(p0.xp).n,
+        oppName: room.state.players[0].username,
+        oppAvatar: p0 ? (p0.avatar||'🧙') : '🧙',
+        state: room.state,
+      });
+    }
   });
 
   // ─── COMBAT ───────────────────────────────────────────────────────────────
