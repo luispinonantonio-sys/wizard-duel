@@ -852,9 +852,10 @@ socket.on('spell_result',({caster,spell,effect,dmg,heal})=>{
     updateBars();
   }
 });
-socket.on('counter_challenge',({phrase,secs,rawDmg})=>{
+socket.on('counter_challenge',({phrase,keywords,secs,rawDmg})=>{
   playSound('shield_hit');
   G.counterActive=true;G.counterStartTs=Date.now();
+  window._counterKW=keywords||null;
   setSpellsDisabled(true);showCounterChallenge(phrase,secs,rawDmg);
 });
 socket.on('counter_pending',({secs})=>{
@@ -920,6 +921,7 @@ socket.on('opponent_reconnected',()=>{ addLog('🔄 ¡El rival reconectó!','hl'
 
 // ── COUNTER UI ────────────────────────────────────────────────────────────────
 function showCounterChallenge(phrase,secs,rawDmg){
+  window._counterPhrase=phrase;
   const panel=document.getElementById('cpanel');
   panel.className='cpanel active';
   panel.innerHTML=`
@@ -940,7 +942,7 @@ function showCounterChallenge(phrase,secs,rawDmg){
     if(left<=0){clearInterval(G.counterInterval);socket.emit('counter_attempt',{success:false,reactionMs:null});}
   },100);
 }
-function startCounterVoice(phrase){
+function startCounterVoice(phrase,keywords){
   if(!isVoice()){socket.emit('counter_attempt',{success:false,reactionMs:null});return;}
   const btn=document.getElementById('cp-mic');
   if(btn){btn.classList.add('on');btn.textContent='🔴 ESCUCHANDO...';}
@@ -950,10 +952,9 @@ function startCounterVoice(phrase){
     let best='';
     for(let i=0;i<e.results[0].length;i++)if(e.results[0][i].transcript.length>best.length)best=e.results[0][i].transcript;
     document.getElementById('tx').textContent='"'+best+'"';
-    const words=phrase.toLowerCase().split(' '),sw=best.toLowerCase().split(' ');
-    let matched=0;
-    words.forEach(w=>{if(sw.some(s=>s.includes(w.substring(0,4))||w.includes(s.substring(0,4))))matched++;});
-    const success=matched/words.length>=0.5;
+    const spoken=best.toLowerCase().trim();
+    const kws=keywords||[phrase.replace(/[¡!]/g,'').toLowerCase()];
+    const success=kws.some(kw=>spoken.includes(kw)||kw.startsWith(spoken.substring(0,4)));
     const reactionMs=Date.now()-G.counterStartTs;
     clearInterval(G.counterInterval);
     socket.emit('counter_attempt',{success,reactionMs});
