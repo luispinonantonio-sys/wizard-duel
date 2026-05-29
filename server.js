@@ -146,6 +146,8 @@ const SPELLS = {
   confundo:     { dmg: 15, heal: 0, stun: true },
   sectum:       { dmg: 40, heal: 0 },
 };
+const CAST_SECS = 4; // fixed time to choose a spell each turn
+
 const COUNTER_PHRASES = [
   'Avis Oppugno','Finite Incantatem','Riddikulus','Obliviate',
   'Nox Eternum','Serpensortia','Deletrius','Fumos Duo',
@@ -154,6 +156,15 @@ const COUNTER_PHRASES = [
 ];
 
 function makeCode() { return Math.random().toString(36).substring(2,6).toUpperCase(); }
+
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
 
 function makeRoomState() {
   return {
@@ -166,7 +177,40 @@ function makeRoomState() {
     turn: 0,
     phase: 'battle',
     counterFor: null, counterDmg: 0, counterPhrase: '', counterDeadline: 0,
+    castDeadline: 0,
   };
+}
+
+// Emit turn_change with a fresh shuffled spell order and cast deadline
+function emitTurnChange(code, room, io) {
+  const pi = room.state.turn;
+  const playerPath = room.state.players[pi].path;
+  const PATH_SPELLS = {
+    destructor: ['stupefy','avada','expelliarmus','crucio'],
+    guardian:   ['protego','lumos','expelliarmus','aguamenti'],
+    trickster:  ['confundo','expelliarmus','stupefy','sectum'],
+  };
+  const spells = PATH_SPELLS[playerPath] || PATH_SPELLS.destructor;
+  const spellOrder = shuffle(spells);
+  const deadline = Date.now() + CAST_SECS * 1000;
+  room.state.castDeadline = deadline;
+
+  io.to(code).emit('turn_change', {
+    turn: pi,
+    spellOrder,       // shuffled order for the attacker to see
+    castSecs: CAST_SECS,
+    castDeadline: deadline,
+  });
+
+  // Auto-skip if attacker doesn't cast in time
+  setTimeout(() => {
+    if (room.state.phase === 'battle' && room.state.turn === pi && room.state.castDeadline === deadline) {
+      const ti = pi === 0 ? 1 : 0;
+      room.state.turn = ti;
+      io.to(code).emit('turn_skipped', { skipped: pi });
+      emitTurnChange(code, room, io);
+    }
+  }, (CAST_SECS + 0.5) * 1000);
 }
 
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
@@ -242,6 +286,9 @@ io.on('connection', socket => {
     socket.roomCode = code.toUpperCase();
     socket.playerIndex = 1;
 
+    // Kick off first turn timer
+    emitTurnChange(code, room, io);
+
     // Send each player their own index + opponent info
     room.sockets[0].emit('duel_start', {
       yourIndex: 0,
@@ -279,7 +326,7 @@ io.on('connection', socket => {
       room.state.players[pi].shield = true;
       io.to(code).emit('spell_result', { caster:pi, spell, effect:'shield' });
       room.state.turn = ti;
-      io.to(code).emit('turn_change', { turn:ti });
+      emitTurnChange(code, room, io);
       return;
     }
     if (s.stun) {
@@ -288,14 +335,14 @@ io.on('connection', socket => {
       room.state.players[ti].hp = Math.max(0, room.state.players[ti].hp - dmg);
       room.state.players[ti].stun = true;
       io.to(code).emit('spell_result', { caster:pi, spell, effect:'stun', dmg });
-      checkWin(code, room); if (room.state.phase !== 'gameover') { room.state.turn = ti; io.to(code).emit('turn_change',{turn:ti}); }
+      checkWin(code, room); if (room.state.phase !== 'gameover') { room.state.turn = ti; emitTurnChange(code, room, io); }
       return;
     }
     if (s.heal > 0) {
       const h = Math.round(s.heal * mults.heal);
       room.state.players[pi].hp = Math.min(100, room.state.players[pi].hp + h);
       io.to(code).emit('spell_result', { caster:pi, spell, effect:'heal', heal:h });
-      room.state.turn = ti; io.to(code).emit('turn_change',{turn:ti});
+      room.state.turn = ti; emitTurnChange(code, room, io);
       return;
     }
     if (s.dmg > 0) {
@@ -367,7 +414,7 @@ function resolveCounter(code, room, success) {
   checkWin(code, room);
   if (room.state.phase !== 'gameover') {
     room.state.turn = ti;
-    io.to(code).emit('turn_change', { turn:ti });
+    emitTurnChange(code, room, io);
   }
 }
 
