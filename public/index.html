@@ -726,7 +726,7 @@ socket.on('duel_start',({yourIndex,yourLevel,oppLevel,oppName,oppAvatar})=>{
   const myM=LEVEL_META.find(l=>l.n===yourLevel)||LEVEL_META[0];
   const opM=LEVEL_META.find(l=>l.n===oppLevel)||LEVEL_META[0];
   const myAv=G.profile.avatar||'🧙';
-  const oppAv=oppAvatar||'🧙‍♀️';
+  const oppAv=oppAvatar||(myAv==='🧙'?'🧙‍♀️':'🧙'); // pick different default than player
   document.getElementById('psp').textContent=myAv;
   document.getElementById('esp').textContent=oppAv;
   document.getElementById('p-name').textContent=myAv+' '+G.profile.username.toUpperCase();
@@ -1013,9 +1013,21 @@ function goLobby(){
   document.getElementById('lobby-screen').style.display='flex';
   document.getElementById('room-btns').style.display='block';
   document.getElementById('code-display').style.display='none';
-  musicStop();
+  musicStop(true);
+  // clear all game state
   G.myIndex=null;G.myHP=100;G.oppHP=100;G.myTurn=false;G.counterActive=false;
-  clearInterval(G.counterInterval);clearInterval(G.castInterval);resetCastTimer();
+  clearInterval(G.counterInterval);clearInterval(G.castInterval);
+  resetCastTimer();
+  resetCounterPanel();
+  stopListen();
+  // clear UI state
+  setLobbyMsg('','');
+  addLog('⚔️ Listo para un nuevo duelo','');
+  document.getElementById('tind').textContent='—';
+  document.getElementById('tx').textContent='';
+  // reset sprites to defaults
+  document.getElementById('psp').textContent='🧙';
+  document.getElementById('esp').textContent='🧙‍♀️';
   renderLobby();
 }
 
