@@ -557,6 +557,13 @@ socket.on('auth_ok',profile=>{
   document.getElementById('auth-screen').style.display='none';
   document.getElementById('lobby-screen').style.display='flex';
   renderLobby();
+  // if user had a pending room (reconnect while waiting), restore it
+  if(profile.pendingRoom){
+    document.getElementById('room-btns').style.display='none';
+    document.getElementById('code-display').style.display='block';
+    document.getElementById('code-big').textContent=profile.pendingRoom;
+    setLobbyMsg('Reconectado — esperando al rival...','wait');
+  }
 });
 socket.on('auth_error',({msg})=>setAuthMsg(msg,'err'));
 
