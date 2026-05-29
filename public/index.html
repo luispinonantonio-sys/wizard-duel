@@ -107,6 +107,16 @@ input.field::placeholder{color:rgba(200,180,255,.35)}
 .stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:10px}
 .sbox{background:rgba(0,0,0,.25);border-radius:8px;padding:8px 4px;text-align:center}
 .sbox-val{font-family:'Cinzel',serif;font-size:var(--f-lg);font-weight:700;color:var(--gold)}
+.av-modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px}
+.av-modal{background:#0d0a1a;border:1.5px solid rgba(200,180,255,.25);border-radius:16px;padding:20px;width:100%;max-width:360px}
+.av-modal-title{font-family:'Cinzel',serif;color:#e8c87a;font-size:13px;letter-spacing:2px;text-align:center;margin-bottom:4px}
+.av-modal-sub{color:rgba(200,180,255,.5);font-size:10px;text-align:center;font-style:italic;margin-bottom:14px;font-family:serif}
+.av-modal-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-bottom:14px}
+.av-opt{background:rgba(255,255,255,.05);border:1.5px solid rgba(200,180,255,.2);border-radius:10px;padding:9px 5px;cursor:pointer;text-align:center;transition:all .15s}
+.av-opt:active{transform:scale(.93)}
+.av-opt.sel{border-color:#e8c87a;background:rgba(232,200,122,.12)}
+.av-opt-icon{font-size:24px;margin-bottom:3px}
+.av-opt-name{color:#e8c87a;font-size:8px;font-weight:700;letter-spacing:.5px}
 .sbox-lbl{font-size:9px;color:rgba(200,180,255,.5);margin-top:2px}
 
 /* ── PATH SELECTION ── */
@@ -180,7 +190,9 @@ input.code-inp:focus{border-color:#60a5fa}
   display:flex;justify-content:space-between;align-items:flex-end;
   padding:0 28px;height:80px;position:relative;flex-shrink:0;
 }
-.wsp{font-size:48px;user-select:none;transition:transform .3s}
+.wsp{font-size:48px;user-select:none;transition:transform .3s;position:relative;display:inline-block}
+.wsp-wrap{position:relative;display:inline-flex;flex-direction:column;align-items:center}
+.wsp-badge{font-size:14px;line-height:1;margin-bottom:2px}
 .wsp.casting{animation:cA .5s ease}
 .wsp.hit{animation:hA .4s ease}
 @keyframes cA{0%{transform:scale(1)}30%{transform:scale(1.2) translateX(8px)}100%{transform:scale(1)}}
@@ -328,6 +340,8 @@ input.code-inp:focus{border-color:#60a5fa}
   <div id="auth-register" style="display:none">
     <input class="field" id="r-user" placeholder="Elige tu nombre de mago" autocomplete="username" autocapitalize="none">
     <input class="field" id="r-pass" type="password" placeholder="Contraseña (mín. 3 caracteres)" autocomplete="new-password">
+    <div style="font-family:'Cinzel',serif;color:rgba(200,180,255,.6);font-size:10px;letter-spacing:2px;text-align:center;margin-bottom:8px">— ELIGE TU AVATAR —</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-bottom:12px" id="av-picker"></div>
     <button class="btn btn-gold" onclick="doRegister()">🪄 CREAR MAGO</button>
   </div>
   <div class="msg" id="auth-msg"></div>
@@ -381,8 +395,14 @@ input.code-inp:focus{border-color:#60a5fa}
   </div>
 
   <div class="arena" id="arena">
-    <div class="wsp" id="psp">🧙</div>
-    <div class="wsp" id="esp">🧙‍♀️</div>
+    <div class="wsp-wrap">
+      <div class="wsp-badge" id="psp-badge">🌱</div>
+      <div class="wsp" id="psp">🧙</div>
+    </div>
+    <div class="wsp-wrap">
+      <div class="wsp-badge" id="esp-badge">🌱</div>
+      <div class="wsp" id="esp">🧙‍♀️</div>
+    </div>
   </div>
 
   <div class="cpanel idle" id="cpanel">
@@ -442,10 +462,24 @@ const LEVEL_META=[
   {n:4,name:'Experto',  color:'#fb923c',icon:'🔥'},
   {n:5,name:'Maestro',  color:'#c084fc',icon:'💀'},
 ];
+const AVATARS=[
+  {icon:'🧙', name:'Mago'},
+  {icon:'🧙‍♀️',name:'Maga'},
+  {icon:'🧝', name:'Elfo'},
+  {icon:'🧝‍♀️',name:'Elfa'},
+  {icon:'👸', name:'Princesa'},
+  {icon:'🤴', name:'Príncipe'},
+  {icon:'🧚', name:'Hada'},
+  {icon:'🐱', name:'Gato'},
+  {icon:'👹', name:'Ogro'},
+  {icon:'🧟', name:'Nigromante'},
+  {icon:'🐲', name:'Dragón'},
+  {icon:'🦉', name:'Búho'},
+];
 const XP_THRESHOLDS=[0,100,300,700,1500];
 
 let G={
-  profile:null,selectedPath:null,
+  profile:null,selectedPath:null,selectedAvatar:'🧙',
   myIndex:null,myHP:100,oppHP:100,
   myTurn:false,counterActive:false,
   listening:false,recognition:null,atkRec:null,
@@ -460,6 +494,30 @@ function showTab(t){
   document.getElementById('auth-login').style.display   =t==='login'   ?'block':'none';
   document.getElementById('auth-register').style.display=t==='register'?'block':'none';
   setAuthMsg('','');
+  if(t==='register') renderAvatarPicker();
+}
+function renderAvatarPicker(){
+  const grid=document.getElementById('av-picker');
+  if(!grid||grid.children.length>0) return;
+  grid.innerHTML=AVATARS.map((a,i)=>`
+    <div onclick="pickAvatar('${a.icon}',this)" style="
+      background:rgba(255,255,255,.05);border:1.5px solid ${i===0?'#e8c87a':'rgba(200,180,255,.2)'};
+      border-radius:10px;padding:8px 4px;cursor:pointer;text-align:center;transition:all .15s;
+      ${i===0?'background:rgba(232,200,122,.12);':''}
+    ">
+      <div style="font-size:24px;margin-bottom:3px">${a.icon}</div>
+      <div style="font-family:'Cinzel',serif;color:#e8c87a;font-size:8px;font-weight:700;letter-spacing:.5px">${a.name.toUpperCase()}</div>
+    </div>`).join('');
+  G.selectedAvatar=AVATARS[0].icon;
+}
+function pickAvatar(icon,el){
+  G.selectedAvatar=icon;
+  document.querySelectorAll('#av-picker > div').forEach(d=>{
+    d.style.borderColor='rgba(200,180,255,.2)';
+    d.style.background='rgba(255,255,255,.05)';
+  });
+  el.style.borderColor='#e8c87a';
+  el.style.background='rgba(232,200,122,.12)';
 }
 function setAuthMsg(t,cls){const el=document.getElementById('auth-msg');el.textContent=t;el.className='msg '+(cls||'');}
 function doLogin(){
@@ -473,7 +531,7 @@ function doRegister(){
   const u=document.getElementById('r-user').value.trim();
   const p=document.getElementById('r-pass').value;
   if(!u||!p){setAuthMsg('Completa los campos','err');return;}
-  socket.emit('register',{username:u,password:p});
+  socket.emit('register',{username:u,password:p,avatar:G.selectedAvatar||'🧙'});
   setAuthMsg('Creando tu mago...','wait');
 }
 socket.on('auth_ok',profile=>{
@@ -508,9 +566,13 @@ function renderProfileCard(profile){
   const pct=profile.next?Math.min(100,Math.round((profile.xp-xpC)/(xpN-xpC)*100)):100;
   const avgRxn=profile.stats.avgReactionMs?(profile.stats.avgReactionMs/1000).toFixed(2)+'s':'—';
   const wr=profile.stats.wins+profile.stats.losses>0?Math.round(profile.stats.wins/(profile.stats.wins+profile.stats.losses)*100)+'%':'—';
+  const myAvatar=profile.avatar||'🧙';
   document.getElementById('profile-card').innerHTML=`
     <div class="pcard-top">
-      <div class="avatar" style="background:${lm.color}22;border-color:${lm.color}">${lm.icon}</div>
+      <div class="avatar" style="background:${lm.color}22;border-color:${lm.color};position:relative">
+        <span>${myAvatar}</span>
+        <span style="position:absolute;bottom:-4px;right:-4px;font-size:12px;line-height:1">${lm.icon}</span>
+      </div>
       <div class="pcard-info">
         <div class="pcard-name">${profile.username}</div>
         <div class="pcard-lvl" style="color:${lm.color}">Nv.${profile.level} — ${lm.name}</div>
@@ -528,7 +590,13 @@ function renderProfileCard(profile){
       <div class="sbox"><div class="sbox-val">${wr}</div><div class="sbox-lbl">Win %</div></div>
       <div class="sbox"><div class="sbox-val">${profile.stats.countersSuccess}</div><div class="sbox-lbl">Contras</div></div>
       <div class="sbox"><div class="sbox-val">${avgRxn}</div><div class="sbox-lbl">Reacción</div></div>
-    </div>`;
+    </div>
+    <button onclick="openAvatarModal()" style="
+      width:100%;margin-top:10px;padding:10px;border-radius:8px;
+      border:1px solid rgba(200,180,255,.25);background:rgba(200,180,255,.07);
+      color:rgba(200,180,255,.8);font-family:'Cinzel',serif;font-size:10px;
+      font-weight:700;letter-spacing:2px;cursor:pointer;transition:all .15s;
+    ">✏️ CAMBIAR AVATAR</button>\`;
 }
 function selPath(k){
   document.querySelectorAll('.path-card').forEach(c=>c.classList.remove('on'));
@@ -556,7 +624,7 @@ socket.on('room_created',({code})=>{
 socket.on('error',({msg})=>setLobbyMsg(msg,'err'));
 
 // ── DUEL START ────────────────────────────────────────────────────────────────
-socket.on('duel_start',({yourIndex,yourLevel,oppLevel,oppName})=>{
+socket.on('duel_start',({yourIndex,yourLevel,oppLevel,oppName,oppAvatar})=>{
   G.myIndex=yourIndex; G.myHP=100; G.oppHP=100; G.myTurn=yourIndex===0;
   document.getElementById('lobby-screen').style.display='none';
   const gameEl=document.getElementById('game');
@@ -567,10 +635,16 @@ socket.on('duel_start',({yourIndex,yourLevel,oppLevel,oppName})=>{
   badge.style.cssText=`background:${p.color}22;color:${p.color};border:.5px solid ${p.color}55`;
   const myM=LEVEL_META.find(l=>l.n===yourLevel)||LEVEL_META[0];
   const opM=LEVEL_META.find(l=>l.n===oppLevel)||LEVEL_META[0];
-  document.getElementById('p-name').textContent='🧙 '+G.profile.username.toUpperCase();
+  const myAv=G.profile.avatar||'🧙';
+  const oppAv=oppAvatar||'🧙‍♀️';
+  document.getElementById('psp').textContent=myAv;
+  document.getElementById('esp').textContent=oppAv;
+  document.getElementById('p-name').textContent=myAv+' '+G.profile.username.toUpperCase();
   document.getElementById('p-lvl').textContent=myM.icon+' '+myM.name+' · '+G.profile.counterSecs+'s';
-  document.getElementById('opp-name').textContent='🧙‍♀️ '+oppName.toUpperCase();
+  document.getElementById('opp-name').textContent=oppAv+' '+oppName.toUpperCase();
   document.getElementById('opp-lvl').textContent=opM.icon+' '+opM.name;
+  document.getElementById('psp-badge').textContent=myM.icon;
+  document.getElementById('esp-badge').textContent=opM.icon;
   _initAudio();
   musicStart();
   renderSpells();
@@ -1235,6 +1309,55 @@ function playSound(name){
   }catch(e){console.warn('audio error',e);}
 }
 // ── END AUDIO ENGINE ──────────────────────────────────────────────────────────
+
+function openAvatarModal(){
+  if(document.getElementById('av-modal')) return;
+  const current=G.profile?.avatar||'🧙';
+  const modal=document.createElement('div');
+  modal.className='av-modal-bg'; modal.id='av-modal';
+  modal.innerHTML=`
+    <div class="av-modal">
+      <div class="av-modal-title">✨ CAMBIAR AVATAR</div>
+      <div class="av-modal-sub">Elige tu nuevo personaje</div>
+      <div class="av-modal-grid" id="av-modal-grid"></div>
+      <button class="btn btn-gold" id="av-save-btn" onclick="saveAvatar()" style="margin-bottom:8px">GUARDAR</button>
+      <button class="btn btn-ghost" onclick="closeAvatarModal()" style="min-height:44px;font-size:11px">CANCELAR</button>
+    </div>`;
+  document.body.appendChild(modal);
+  let tempAv=current;
+  const grid=document.getElementById('av-modal-grid');
+  grid.innerHTML=AVATARS.map(a=>`
+    <div class="av-opt${a.icon===current?' sel':''}" onclick="tempPickAv('${a.icon}',this)">
+      <div class="av-opt-icon">${a.icon}</div>
+      <div class="av-opt-name">${a.name.toUpperCase()}</div>
+    </div>`).join('');
+  window._tempAv=current;
+}
+
+function tempPickAv(icon,el){
+  window._tempAv=icon;
+  document.querySelectorAll('.av-opt').forEach(d=>d.classList.remove('sel'));
+  el.classList.add('sel');
+}
+
+function saveAvatar(){
+  const av=window._tempAv||G.profile?.avatar||'🧙';
+  const btn=document.getElementById('av-save-btn');
+  if(btn){btn.textContent='GUARDANDO...';btn.disabled=true;}
+  socket.emit('update_avatar',{avatar:av});
+}
+
+function closeAvatarModal(){
+  document.getElementById('av-modal')?.remove();
+}
+
+socket.on('avatar_updated',profile=>{
+  G.profile=profile;
+  closeAvatarModal();
+  renderLobby();
+  setLobbyMsg('¡Avatar actualizado!','ok');
+  setTimeout(()=>setLobbyMsg('',''),2000);
+});
 
 function isVoice(){return !!(window.SpeechRecognition||window.webkitSpeechRecognition);}
 </script>
