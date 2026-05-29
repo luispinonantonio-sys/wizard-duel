@@ -108,6 +108,46 @@ input.field::placeholder{color:rgba(200,180,255,.35)}
 .sbox{background:rgba(0,0,0,.25);border-radius:8px;padding:8px 4px;text-align:center}
 .sbox-val{font-family:'Cinzel',serif;font-size:var(--f-lg);font-weight:700;color:var(--gold)}
 .av-modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px}
+.manual-bg{position:fixed;inset:0;background:rgba(0,0,0,.95);z-index:150;display:flex;flex-direction:column;overflow:hidden}
+.manual-hdr{padding:14px 16px 10px;text-align:center;border-bottom:.5px solid rgba(200,180,255,.1);flex-shrink:0}
+.manual-title{font-family:'Cinzel',serif;color:#e8c87a;font-size:15px;font-weight:700;letter-spacing:3px;margin-bottom:2px}
+.manual-nav{display:flex;overflow-x:auto;border-bottom:.5px solid rgba(200,180,255,.1);flex-shrink:0;scrollbar-width:none}
+.manual-nav::-webkit-scrollbar{display:none}
+.mnav-tab{padding:10px 16px;font-family:'Cinzel',serif;font-size:9px;font-weight:700;letter-spacing:1px;cursor:pointer;white-space:nowrap;color:rgba(200,180,255,.45);border-bottom:2px solid transparent;flex-shrink:0;transition:all .2s}
+.mnav-tab.on{color:#e8c87a;border-bottom-color:#e8c87a}
+.manual-body{flex:1;overflow-y:auto;padding:14px 16px;scrollbar-width:thin;scrollbar-color:rgba(200,180,255,.2) transparent}
+.msec{display:none;font-family:'Crimson Text',serif}
+.msec.on{display:block}
+.mcard{background:rgba(255,255,255,.04);border:.5px solid rgba(200,180,255,.15);border-radius:10px;padding:12px 14px;margin-bottom:10px}
+.mcard-title{font-family:'Cinzel',serif;color:#e8c87a;font-size:11px;font-weight:700;margin-bottom:6px}
+.mcard-body{font-size:13px;color:rgba(220,210,255,.75);line-height:1.7}
+.mhl{color:#e8c87a;font-weight:600} .mred{color:#f87171;font-weight:600} .mgrn{color:#4ade80;font-weight:600} .mpurp{color:#a855f7;font-weight:600}
+.mtable{width:100%;border-collapse:collapse;margin:8px 0}
+.mtable th{font-family:'Cinzel',serif;font-size:9px;letter-spacing:1px;color:rgba(200,180,255,.5);padding:6px 8px;text-align:left;border-bottom:.5px solid rgba(200,180,255,.15)}
+.mtable td{font-size:12px;color:rgba(220,210,255,.75);padding:6px 8px;border-bottom:.5px solid rgba(255,255,255,.05)}
+.mtable tr:last-child td{border-bottom:none}
+.mpath-card{border-radius:11px;padding:12px 14px;margin-bottom:10px;border:1px solid}
+.mpath-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.mpc{background:rgba(0,0,0,.2);border-radius:7px;padding:8px 10px}
+.mpc-lbl{font-family:'Cinzel',serif;font-size:8px;letter-spacing:1px;margin-bottom:4px}
+.mpc-item{font-size:11px;color:rgba(220,210,255,.7);margin-bottom:2px;line-height:1.4}
+.mspell{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;margin-bottom:4px;background:rgba(255,255,255,.04);border:.5px solid rgba(200,180,255,.1)}
+.mspell-icon{font-size:18px;width:26px;text-align:center;flex-shrink:0}
+.mspell-info{flex:1}
+.mspell-name{font-family:'Cinzel',serif;font-size:10px;font-weight:700;color:#e8c87a}
+.mspell-desc{font-size:11px;color:rgba(200,180,255,.6);margin-top:1px}
+.mspell-tags{display:flex;gap:4px;margin-top:3px;flex-wrap:wrap}
+.mtag{font-size:8px;font-family:'Cinzel',serif;padding:1px 5px;border-radius:3px;font-weight:700}
+.mtag.d{background:rgba(248,113,113,.15);color:#f87171}
+.mtag.h{background:rgba(74,222,128,.12);color:#4ade80}
+.mtag.s{background:rgba(96,165,250,.12);color:#60a5fa}
+.mtag.c{background:rgba(168,85,247,.12);color:#a855f7}
+.mtag.sp{background:rgba(251,191,36,.1);color:#fbbf24}
+.mtip{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;background:rgba(255,255,255,.04);border-radius:9px;margin-bottom:8px;border-left:2px solid}
+.mtip-icon{font-size:18px;flex-shrink:0}
+.mtip-title{font-family:'Cinzel',serif;font-size:10px;font-weight:700;margin-bottom:3px}
+.mtip-text{font-size:12px;color:rgba(200,180,255,.65);line-height:1.5}
+.mlvl{display:inline-block;font-family:'Cinzel',serif;font-size:8px;font-weight:700;padding:2px 8px;border-radius:10px;margin-bottom:8px;margin-top:4px}
 .av-modal{background:#0d0a1a;border:1.5px solid rgba(200,180,255,.25);border-radius:16px;padding:20px;width:100%;max-width:360px}
 .av-modal-title{font-family:'Cinzel',serif;color:#e8c87a;font-size:13px;letter-spacing:2px;text-align:center;margin-bottom:4px}
 .av-modal-sub{color:rgba(200,180,255,.5);font-size:10px;text-align:center;font-style:italic;margin-bottom:14px;font-family:serif}
@@ -342,6 +382,24 @@ input.code-inp:focus{border-color:#60a5fa}
   <div id="auth-register" style="display:none">
     <input class="field" id="r-user" placeholder="Elige tu nombre de mago" autocomplete="username" autocapitalize="none">
     <input class="field" id="r-pass" type="password" placeholder="Contraseña (mín. 3 caracteres)" autocomplete="new-password">
+    <div style="font-family:'Cinzel',serif;color:rgba(200,180,255,.6);font-size:10px;letter-spacing:2px;text-align:center;margin-bottom:8px">— ELIGE TU CAMINO — <span style="color:#f87171;font-size:9px">(permanente)</span></div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:12px" id="path-picker">
+      <div onclick="pickPath('destructor',this)" style="background:rgba(248,113,113,.06);border:1.5px solid rgba(248,113,113,.25);border-radius:10px;padding:10px 6px;cursor:pointer;text-align:center;transition:all .15s" data-path="destructor">
+        <div style="font-size:24px;margin-bottom:4px">💥</div>
+        <div style="font-family:Cinzel,serif;color:#f87171;font-size:9px;font-weight:700;letter-spacing:1px">DESTRUCTOR</div>
+        <div style="color:rgba(248,180,180,.6);font-size:9px;font-style:italic;margin-top:3px;font-family:serif">Daño puro</div>
+      </div>
+      <div onclick="pickPath('guardian',this)" style="background:rgba(96,165,250,.06);border:1.5px solid rgba(96,165,250,.25);border-radius:10px;padding:10px 6px;cursor:pointer;text-align:center;transition:all .15s" data-path="guardian">
+        <div style="font-size:24px;margin-bottom:4px">🛡️</div>
+        <div style="font-family:Cinzel,serif;color:#60a5fa;font-size:9px;font-weight:700;letter-spacing:1px">GUARDIÁN</div>
+        <div style="color:rgba(180,210,255,.6);font-size:9px;font-style:italic;margin-top:3px;font-family:serif">Resistencia</div>
+      </div>
+      <div onclick="pickPath('trickster',this)" style="background:rgba(192,132,252,.06);border:1.5px solid rgba(192,132,252,.25);border-radius:10px;padding:10px 6px;cursor:pointer;text-align:center;transition:all .15s" data-path="trickster">
+        <div style="font-size:24px;margin-bottom:4px">🎭</div>
+        <div style="font-family:Cinzel,serif;color:#c084fc;font-size:9px;font-weight:700;letter-spacing:1px">TRICKSTER</div>
+        <div style="color:rgba(220,190,255,.6);font-size:9px;font-style:italic;margin-top:3px;font-family:serif">Caos y engaño</div>
+      </div>
+    </div>
     <div style="font-family:'Cinzel',serif;color:rgba(200,180,255,.6);font-size:10px;letter-spacing:2px;text-align:center;margin-bottom:8px">— ELIGE TU AVATAR —</div>
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-bottom:12px" id="av-picker"></div>
     <button class="btn btn-gold" onclick="doRegister()">🪄 CREAR MAGO</button>
@@ -370,7 +428,8 @@ input.code-inp:focus{border-color:#60a5fa}
     </div>
   </div>
   <div class="msg" id="lobby-msg"></div>
-  <button class="btn btn-ghost" onclick="logout()" style="margin-top:auto;font-size:11px;min-height:44px">Cerrar sesión</button>
+  <button class="btn btn-ghost" onclick="openManual()" style="font-size:11px;min-height:44px;margin-top:auto">📖 GRIMORIO — Reglas y hechizos</button>
+  <button class="btn btn-ghost" onclick="logout()" style="font-size:11px;min-height:44px;margin-top:6px">Cerrar sesión</button>
 </div>
 
 <!-- ── GAME ── -->
@@ -490,6 +549,39 @@ const SPELLS={
   desgarrar: {name:'Desgarrar', icon:'🗡️',dmg:40,heal:0,  cost:45,power:2,secret:true,kw:['desgarrar','desgarra','desgarro']},
 };
 const MAX_ENERGY=100;
+
+const CATALOG={
+  aturdir:       {name:'Aturdir',      icon:'⚡', dmg:25, cost:25, power:1, kw:['aturdir','aturde']},
+  expulsar:      {name:'Expulsar',     icon:'💥', dmg:20, cost:20, power:1, kw:['expulsar','expulsa']},
+  escudo:        {name:'Escudo',       icon:'🛡️',shield:true, cost:28, power:0, kw:['escudo','escudar']},
+  quemar:        {name:'Quemar',       icon:'🔥', dmg:35, cost:40, power:2, kw:['quemar','quema']},
+  destruir:      {name:'Destruir',     icon:'💀', dmg:45, cost:50, power:2, kw:['destruir','destruye']},
+  golpe:         {name:'Golpe',        icon:'👊', dmg:18, cost:15, power:1, kw:['golpe','golpea']},
+  impacto:       {name:'Impacto',      icon:'💫', dmg:28, cost:30, power:1, kw:['impacto','impacta']},
+  tormenta:      {name:'Tormenta',     icon:'🌪️',dmg:38, cost:42, power:2, kw:['tormenta']},
+  rafaga:        {name:'Ráfaga',       icon:'💨', dmg:22, cost:18, power:1, kw:['ráfaga','rafaga']},
+  aniquilar:     {name:'Aniquilar',    icon:'☠️', dmg:50, cost:55, power:3, kw:['aniquilar','aniquila']},
+  caos_total:    {name:'Caos Total',   icon:'🌌', dmg:60, cost:65, power:3, legendary:true, kw:['caos','caos total']},
+  sanar:         {name:'Sanar',        icon:'🌟', heal:20, cost:25, power:0, kw:['sanar','sana']},
+  refugio:       {name:'Refugio',      icon:'🏰', heal:12, cost:15, power:0, kw:['refugio']},
+  barrera:       {name:'Barrera',      icon:'🔰', shield:true, cost:22, power:0, kw:['barrera']},
+  restaurar:     {name:'Restaurar',    icon:'💧', heal:30, cost:35, power:0, kw:['restaurar','restaura']},
+  reflejo:       {name:'Reflejo',      icon:'🪞', reflect:0.6, cost:35, power:2, kw:['reflejo','refleja']},
+  golpe_sagrado: {name:'Golpe Sagrado',icon:'💢', dmg:30, cost:38, power:2, kw:['golpe sagrado','sagrado']},
+  curar_mayor:   {name:'Curar Mayor',  icon:'✨', heal:40, cost:45, power:0, kw:['curar mayor','curar']},
+  escudo_doble:  {name:'Escudo Doble', icon:'⚔️', shield:true, dmg:15, cost:40, power:0, kw:['escudo doble','doble']},
+  marea_sagrada: {name:'Marea Sagrada',icon:'🌊', dmg:20, heal:20, cost:42, power:2, kw:['marea','marea sagrada']},
+  fortaleza:     {name:'Fortaleza',    icon:'🗼', shield:true, heal:50, cost:60, power:0, legendary:true, kw:['fortaleza']},
+  confundir:     {name:'Confundir',    icon:'🌀', dmg:15, cost:25, power:1, stun:true, kw:['confundir','confunde']},
+  desgarrar:     {name:'Desgarrar',    icon:'🗡️',dmg:40, cost:45, power:2, kw:['desgarrar','desgarra']},
+  engañar:       {name:'Engañar',      icon:'🃏', dmg:20, cost:20, power:1, kw:['engañar','engaña','enganar']},
+  desviar:       {name:'Desviar',      icon:'↩️', shield:true, cost:28, power:0, kw:['desviar','desvía','desvia']},
+  invertir:      {name:'Invertir',     icon:'🔄', dmg:22, cost:22, power:1, kw:['invertir','invierte']},
+  ilusion:       {name:'Ilusión',      icon:'🌫️',dmg:18, cost:15, power:1, kw:['ilusión','ilusion']},
+  trampa:        {name:'Trampa',       icon:'🕸️',dmg:35, cost:38, power:2, kw:['trampa']},
+  robar:         {name:'Robar',        icon:'💰', dmg:20, heal:20, cost:40, power:2, kw:['robar','roba']},
+  caos_puro:     {name:'Caos Puro',    icon:'🎆', dmg:55, cost:60, power:3, legendary:true, kw:['caos puro']},
+};
 const LEVEL_META=[
   {n:1,name:'Novato',   color:'#4ade80',icon:'🌱'},
   {n:2,name:'Aprendiz', color:'#a3e635',icon:'🌿'},
@@ -515,13 +607,14 @@ const XP_THRESHOLDS=[0,100,300,700,1500];
 
 let G={
   profile:null,selectedPath:null,selectedAvatar:'🧙',
-  myEnergy:100,oppEnergy:100,
+  myEnergy:100,oppEnergy:100,currentHand:[],
   myIndex:null,myHP:100,oppHP:100,
   myTurn:false,counterActive:false,roundActive:false,myChose:false,
   listening:false,recognition:null,atkRec:null,
   counterInterval:null,counterStartTs:0,castInterval:null,
 };
 
+window._catalogForManual=CATALOG;
 const socket=io({
   reconnection: true,
   reconnectionAttempts: 10,
@@ -563,6 +656,17 @@ function renderAvatarPicker(){
     </div>`).join('');
   G.selectedAvatar=AVATARS[0].icon;
 }
+function pickPath(path,el){
+  G.selectedPath=path;
+  document.querySelectorAll('#path-picker > div').forEach(d=>{
+    const p=d.dataset.path;
+    const cols={destructor:'#f87171',guardian:'#60a5fa',trickster:'#c084fc'};
+    d.style.borderColor=p===path?cols[p]:'rgba(200,180,255,.2)';
+    d.style.background=p===path?cols[p]+'22':'rgba(255,255,255,.04)';
+    d.style.transform=p===path?'scale(1.04)':'scale(1)';
+  });
+}
+
 function pickAvatar(icon,el){
   G.selectedAvatar=icon;
   document.querySelectorAll('#av-picker > div').forEach(d=>{
@@ -584,7 +688,8 @@ function doRegister(){
   const u=document.getElementById('r-user').value.trim();
   const p=document.getElementById('r-pass').value;
   if(!u||!p){setAuthMsg('Completa los campos','err');return;}
-  socket.emit('register',{username:u,password:p,avatar:G.selectedAvatar||'🧙'});
+  if(!G.selectedPath){ setAuthMsg('Elige tu camino mágico primero','err'); return; }
+  socket.emit('register',{username:u,password:p,avatar:G.selectedAvatar||'🧙',path:G.selectedPath});
   setAuthMsg('Creando tu mago...','wait');
 }
 socket.on('auth_ok',profile=>{
@@ -671,6 +776,8 @@ function renderLobby(){
 }
 function renderProfileCard(profile){
   const lm=LEVEL_META.find(l=>l.n===profile.level)||LEVEL_META[0];
+  const pathMeta={destructor:{icon:'💥',color:'#f87171',name:'Destructor'},guardian:{icon:'🛡️',color:'#60a5fa',name:'Guardián'},trickster:{icon:'🎭',color:'#c084fc',name:'Trickster'}};
+  const pm=pathMeta[profile.path]||{icon:'⚔️',color:'#e8c87a',name:'Sin camino'};
   const xpC=XP_THRESHOLDS[profile.level-1]||0;
   const xpN=XP_THRESHOLDS[profile.level]||profile.xp;
   const pct=profile.next?Math.min(100,Math.round((profile.xp-xpC)/(xpN-xpC)*100)):100;
@@ -686,6 +793,7 @@ function renderProfileCard(profile){
       <div class="pcard-info">
         <div class="pcard-name">${profile.username}</div>
         <div class="pcard-lvl" style="color:${lm.color}">Nv.${profile.level} — ${lm.name}</div>
+        <div style="font-size:10px;color:${pm.color};font-family:'Cinzel',serif;margin-top:2px">${pm.icon} ${pm.name}</div>
         ${profile.streak>=2?`<div class="pcard-streak">🔥 Racha: ${profile.streak}</div>`:''}
       </div>
       <div class="pcard-xp">
@@ -771,19 +879,23 @@ socket.on('duel_start',({yourIndex,yourLevel,oppLevel,oppName,oppAvatar})=>{
 });
 
 // ── SPELLS ────────────────────────────────────────────────────────────────────
-function renderSpells(){
-  document.getElementById('sgrid').innerHTML=PATHS[G.selectedPath].spells.map(sk=>{
-    const s=SPELLS[sk];
+function renderSpells(hand){
+  const spells = hand || G.currentHand;
+  if(!spells||!spells.length) return;
+  document.getElementById('sgrid').innerHTML=spells.map(sk=>{
+    const s=CATALOG[sk];
+    if(!s) return '';
     const canAfford=G.myEnergy>=s.cost;
-    return `<div class="sc${s.secret?' secret':''}${!canAfford?' nrg-low':''}"
+    const stars=s.power>=3?'⭐':s.power>=2?'★★':'';
+    return `<div class="sc${s.legendary?' legendary':''}${!canAfford?' nrg-low':''}"
       data-spell="${sk}" onclick="clickSpell('${sk}')">
-      ${s.secret?'<div class="sbadge">OCULTO</div>':''}
+      ${s.legendary?'<div class="sbadge" style="background:#e8c87a;color:#0d0a1a">⭐</div>':''}
       <div class="si">${s.icon}</div>
       <div class="sn">${s.name}</div>
-      ${s.dmg>0?`<div class="sdmg">-${s.dmg}hp</div>`:''}
-      ${s.heal>0?`<div class="sheal">+${s.heal}hp</div>`:''}
-      ${s.shield?'<div class="sheal">Escudo</div>':''}
-      <div style="font-size:8px;color:#a855f7;font-family:Cinzel,serif;margin-top:2px">${s.cost}⚡</div>
+      ${s.dmg>0?`<div class="sdmg">-${s.dmg}</div>`:''}
+      ${s.heal>0?`<div class="sheal">+${s.heal}</div>`:''}
+      ${s.shield?'<div class="sheal">🛡️</div>':''}
+      <div style="font-size:8px;color:#a855f7;font-family:Cinzel,serif;margin-top:1px">${s.cost}⚡${stars?` ${stars}`:''}</div>
     </div>`;
   }).join('');
 }
@@ -793,7 +905,7 @@ function setSpellsDisabled(d){
 }
 function clickSpell(sk){
   if(!G.roundActive||G.myChose)return;
-  const s=SPELLS[sk];
+  const s=CATALOG[sk];
   if(!s)return;
   if(G.myEnergy<s.cost){
     const card=document.querySelector(`[data-spell="${sk}"]`);
@@ -841,9 +953,15 @@ function stopListen(){
   document.getElementById('mbntxt').textContent=G.myTurn?'🎤 TOCA PARA REACTIVAR':'EN ESPERA...';
 }
 function processVoice(text){
-  for(const sk of PATHS[G.selectedPath].spells)
-    for(const kw of SPELLS[sk].kw)if(text.includes(kw)){clickSpell(sk);return;}
-  addLog('¡Hechizo no reconocido!','ms');
+  // match against current hand only
+  for(const sk of G.currentHand){
+    const s=CATALOG[sk];
+    if(!s) continue;
+    for(const kw of (s.kw||[])){
+      if(text.includes(kw)){clickSpell(sk);return;}
+    }
+  }
+  addLog('¡Hechizo no reconocido! Di: '+G.currentHand.map(k=>CATALOG[k]?.name||k).join(', '),'ms');
 }
 
 // ── SOCKET EVENTS ─────────────────────────────────────────────────────────────
@@ -908,18 +1026,23 @@ socket.on('round_result',({result,spell0,spell1,p0hp,p1hp,p0energy,p1energy})=>{
     else addLog(`🌟 El rival se curó ${h} HP`,'ms');
   }
 
-  updateBars(); updateEnergyBars(); renderSpells();
+  if(result.hand0||result.hand1){
+    const myH=G.myIndex===0?result.hand0:result.hand1;
+    if(myH){G.currentHand=myH;}
+  }
+  updateBars(); updateEnergyBars(); renderSpells(G.currentHand);
   document.getElementById('tind').textContent='⏳ Próxima ronda...';
   document.getElementById('tind').className='tind';
 });
 
-socket.on('round_start',({spellOrder,secs,deadline,myEnergy,oppEnergy})=>{
+socket.on('round_start',({spellOrder,hand,secs,deadline,myEnergy,oppEnergy})=>{
   G.roundActive=true; G.myChose=false;
   G.myEnergy=myEnergy; G.oppEnergy=oppEnergy;
-  reshuffleSpells(spellOrder);
+  G.currentHand=hand||spellOrder;
+  reshuffleSpells(hand||spellOrder);
   startCastTimer(secs,deadline);
   updateEnergyBars();
-  renderSpells();
+  renderSpells(G.currentHand);
   setSpellsDisabled(false);
   updateTurn();
   document.getElementById('tind').textContent='⚡ ¡ELIGE TU HECHIZO AHORA!';
@@ -1561,11 +1684,127 @@ socket.on('avatar_updated',profile=>{
 
 // Map new Spanish spell keys to audio engine sound names
 function spellSoundKey(sk){
-  return {
-    aturdir:'stupefy', expulsar:'expelliarmus', sanar:'lumos', escudo:'protego',
-    destruir:'avada',  quemar:'crucio',         restaurar:'aguamenti',
-    confundir:'confundo', desgarrar:'sectum',
-  }[sk] || sk;
+  const map={
+    aturdir:'stupefy',expulsar:'expelliarmus',sanar:'lumos',escudo:'protego',
+    refugio:'lumos',barrera:'protego',restaurar:'aguamenti',curar_mayor:'lumos',
+    destruir:'avada',quemar:'crucio',golpe:'stupefy',impacto:'stupefy',
+    tormenta:'avada',rafaga:'expelliarmus',aniquilar:'avada',caos_total:'avada',
+    confundir:'confundo',desgarrar:'sectum',engañar:'confundo',invertir:'stupefy',
+    ilusion:'protego',trampa:'crucio',robar:'lumos',caos_puro:'avada',
+    golpe_sagrado:'crucio',reflejo:'counter',escudo_doble:'protego',
+    marea_sagrada:'aguamenti',fortaleza:'protego',desviar:'protego',
+  };
+  return map[sk]||'stupefy';
+}
+
+function openManual(){
+  if(document.getElementById('manual-overlay')) return;
+  const ov=document.createElement('div');
+  ov.className='manual-bg'; ov.id='manual-overlay';
+  ov.innerHTML=`
+    <div class="manual-hdr">
+      <div class="manual-title">📖 GRIMORIO DEL DUELO</div>
+      <div style="color:rgba(200,180,255,.5);font-size:10px;font-style:italic">Todo para convertirte en Maestro</div>
+    </div>
+    <div class="manual-nav">
+      <div class="mnav-tab on" onclick="mShowSec('rules',this)">⚔️ REGLAS</div>
+      <div class="mnav-tab" onclick="mShowSec('paths',this)">🧙 CAMINOS</div>
+      <div class="mnav-tab" onclick="mShowSec('spells',this)">✨ HECHIZOS</div>
+      <div class="mnav-tab" onclick="mShowSec('tips',this)">💡 CONSEJOS</div>
+    </div>
+    <div class="manual-body">
+      <div class="msec on" id="msec-rules">
+        <div class="mcard"><div class="mcard-title">🎯 Objetivo</div><div class="mcard-body">Reduce los <span class="mhl">100 HP</span> del rival a cero. El duelo es una serie de rondas hasta que alguien cae.</div></div>
+        <div class="mcard"><div class="mcard-title">⚡ Rondas simultáneas</div><div class="mcard-body">Ambos tienen <span class="mhl">4 segundos al mismo tiempo</span> para elegir un hechizo. Puedes tocar la carta o decir su nombre al micrófono. Al terminar el tiempo — o cuando los dos eligieron — el resultado se resuelve.</div></div>
+        <div class="mcard"><div class="mcard-title">💥 Tabla de resultados</div>
+          <table class="mtable">
+            <tr><th>TÚ</th><th>RIVAL</th><th>RESULTADO</th></tr>
+            <tr><td>⚡ Ataque</td><td>⚡ Ataque</td><td>💥 Choque — gana el más poderoso</td></tr>
+            <tr><td>⚡ Ataque</td><td>🛡️ Escudo</td><td>🛡️ Bloqueado — 0 daño</td></tr>
+            <tr><td>⚡ Ataque</td><td>— Nada</td><td>✅ Daño completo</td></tr>
+            <tr><td>🛡️ Escudo</td><td>⚡ Ataque</td><td>🛡️ Bloqueado</td></tr>
+            <tr><td>🛡️ Escudo</td><td>🛡️ Escudo</td><td>⏸️ Empate</td></tr>
+            <tr><td>— Nada</td><td>— Nada</td><td>⏰ Turno perdido</td></tr>
+          </table>
+        </div>
+        <div class="mcard"><div class="mcard-title">⚡ Energía</div><div class="mcard-body">Cada hechizo cuesta energía. La barra se recarga sola cada ronda. <span class="mred">Spamear el hechizo más fuerte te deja sin energía.</span></div></div>
+        <div class="mcard"><div class="mcard-title">🎴 Tu mazo</div><div class="mcard-body">Ves <span class="mhl">4 hechizos aleatorios</span> de tu arsenal en cada ronda. Al usarlo vuelve al mazo y sale uno nuevo. Cada <span class="mhl">3 victorias</span> desbloqueas un hechizo nuevo.</div></div>
+      </div>
+      <div class="msec" id="msec-paths">
+        <div class="mcard-body" style="font-size:12px;color:rgba(200,180,255,.6);margin-bottom:12px">El camino se elige al crear tu cuenta y es <span class="mred">permanente para siempre</span>. Define tus hechizos disponibles.</div>
+        <div class="mpath-card" style="border-color:#f87171;background:rgba(248,113,113,.06)">
+          <div style="font-family:'Cinzel',serif;color:#f87171;font-size:13px;font-weight:700;margin-bottom:4px">💥 DESTRUCTOR</div>
+          <div style="font-size:12px;font-style:italic;color:rgba(248,200,200,.7);margin-bottom:8px">"El mejor escudo es que el rival no llegue a atacar."</div>
+          <div class="mpath-grid">
+            <div class="mpc"><div class="mpc-lbl" style="color:#4ade80">✅ Fortalezas</div><div class="mpc-item">💥 Mayor daño por turno</div><div class="mpc-item">⚡ Hechizos baratos</div><div class="mpc-item">🎯 Fácil de aprender</div></div>
+            <div class="mpc"><div class="mpc-lbl" style="color:#f87171">❌ Debilidades</div><div class="mpc-item">🩹 Sin curación</div><div class="mpc-item">🛡️ Vulnerable a escudos</div><div class="mpc-item">📖 Predecible</div></div>
+          </div>
+        </div>
+        <div class="mpath-card" style="border-color:#60a5fa;background:rgba(96,165,250,.06)">
+          <div style="font-family:'Cinzel',serif;color:#60a5fa;font-size:13px;font-weight:700;margin-bottom:4px">🛡️ GUARDIÁN</div>
+          <div style="font-size:12px;font-style:italic;color:rgba(200,220,255,.7);margin-bottom:8px">"No importa cuánto te golpeen — importa quién queda en pie."</div>
+          <div class="mpath-grid">
+            <div class="mpc"><div class="mpc-lbl" style="color:#4ade80">✅ Fortalezas</div><div class="mpc-item">💚 Única curación</div><div class="mpc-item">🛡️ Más bloqueos</div><div class="mpc-item">🪞 Hechizos únicos</div></div>
+            <div class="mpc"><div class="mpc-lbl" style="color:#f87171">❌ Debilidades</div><div class="mpc-item">🐢 Daño más lento</div><div class="mpc-item">💸 Más costoso</div><div class="mpc-item">⏳ Necesita más rondas</div></div>
+          </div>
+        </div>
+        <div class="mpath-card" style="border-color:#c084fc;background:rgba(192,132,252,.06)">
+          <div style="font-family:'Cinzel',serif;color:#c084fc;font-size:13px;font-weight:700;margin-bottom:4px">🎭 TRICKSTER</div>
+          <div style="font-size:12px;font-style:italic;color:rgba(220,200,255,.7);margin-bottom:8px">"Si el rival no sabe qué viene, no puede defenderse."</div>
+          <div class="mpath-grid">
+            <div class="mpc"><div class="mpc-lbl" style="color:#4ade80">✅ Fortalezas</div><div class="mpc-item">🎲 Impredecible</div><div class="mpc-item">😵 Hechizos de control</div><div class="mpc-item">🃏 Ilusión engaña</div></div>
+            <div class="mpc"><div class="mpc-lbl" style="color:#f87171">❌ Debilidades</div><div class="mpc-item">📚 Más difícil</div><div class="mpc-item">⚠️ Alto riesgo</div><div class="mpc-item">🎯 Requiere leer al rival</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="msec" id="msec-spells">
+        <div style="font-family:'Cinzel',serif;color:rgba(200,180,255,.5);font-size:9px;letter-spacing:2px;margin-bottom:8px">— COMPARTIDOS —</div>
+        ${['aturdir','expulsar','escudo'].map(k=>{const s=window._catalogForManual&&window._catalogForManual[k];return s?spellRow(k,s):''}).join('')}
+        <div style="font-family:'Cinzel',serif;color:#f87171;font-size:9px;letter-spacing:2px;margin:10px 0 8px">— 💥 DESTRUCTOR —</div>
+        ${['golpe','impacto','quemar','destruir','tormenta','rafaga','aniquilar','caos_total'].map(k=>{const s=window._catalogForManual&&window._catalogForManual[k];return s?spellRow(k,s):''}).join('')}
+        <div style="font-family:'Cinzel',serif;color:#60a5fa;font-size:9px;letter-spacing:2px;margin:10px 0 8px">— 🛡️ GUARDIÁN —</div>
+        ${['sanar','refugio','barrera','restaurar','reflejo','golpe_sagrado','curar_mayor','escudo_doble','marea_sagrada','fortaleza'].map(k=>{const s=window._catalogForManual&&window._catalogForManual[k];return s?spellRow(k,s):''}).join('')}
+        <div style="font-family:'Cinzel',serif;color:#c084fc;font-size:9px;letter-spacing:2px;margin:10px 0 8px">— 🎭 TRICKSTER —</div>
+        ${['confundir','desgarrar','engañar','desviar','invertir','ilusion','trampa','robar','caos_puro'].map(k=>{const s=window._catalogForManual&&window._catalogForManual[k];return s?spellRow(k,s):''}).join('')}
+      </div>
+      <div class="msec" id="msec-tips">
+        <div class="mlvl" style="background:rgba(74,222,128,.12);color:#4ade80;border:.5px solid rgba(74,222,128,.3)">🌱 NOVATO</div>
+        <div class="mtip" style="border-color:#4ade80"><div class="mtip-icon">🎯</div><div><div class="mtip-title" style="color:#4ade80">Ataca cuando el rival tiene poca energía</div><div class="mtip-text">Si la barra morada del rival está roja, no puede usar hechizos poderosos. Ataca sin miedo.</div></div></div>
+        <div class="mtip" style="border-color:#4ade80"><div class="mtip-icon">🎤</div><div><div class="mtip-title" style="color:#4ade80">Practica los nombres en voz alta</div><div class="mtip-text">Hablar es más rápido que tocar cuando las cartas cambian de lugar. Aprende los nombres hasta que salgan solos.</div></div></div>
+        <div class="mlvl" style="background:rgba(251,191,36,.1);color:#fbbf24;border:.5px solid rgba(251,191,36,.3);margin-top:10px">⚡ INICIADO</div>
+        <div class="mtip" style="border-color:#fbbf24"><div class="mtip-icon">🔄</div><div><div class="mtip-title" style="color:#fbbf24">Varía tus patrones</div><div class="mtip-text">Si siempre atacas, el rival aprende a poner escudo. Si siempre te defiendes, el rival aprende a curarse. Sé impredecible.</div></div></div>
+        <div class="mtip" style="border-color:#fbbf24"><div class="mtip-icon">🧮</div><div><div class="mtip-title" style="color:#fbbf24">Lee la energía del rival</div><div class="mtip-text">Con menos de 50 energía el rival no puede usar hechizos legendarios. Es el momento de arriesgar.</div></div></div>
+        <div class="mlvl" style="background:rgba(192,132,252,.12);color:#c084fc;border:.5px solid rgba(192,132,252,.3);margin-top:10px">💀 EXPERTO</div>
+        <div class="mtip" style="border-color:#c084fc"><div class="mtip-icon">♟️</div><div><div class="mtip-title" style="color:#c084fc">Piedra papel tijeras con profundidad</div><div class="mtip-text">Ataque poderoso vence a básico. Escudo vence a cualquier ataque. Ataque vence a quien no hace nada. El juego real está en leer al rival — no en tener el hechizo más fuerte.</div></div></div>
+        <div class="mtip" style="border-color:#c084fc"><div class="mtip-icon">⚡</div><div><div class="mtip-title" style="color:#c084fc">Gestiona la energía como recurso</div><div class="mtip-text">Guarda energía en rondas que no importan. Gástala toda cuando el rival esté bajo de HP y no espere el golpe final.</div></div></div>
+      </div>
+    </div>
+    <div style="padding:10px 16px;border-top:.5px solid rgba(200,180,255,.1);flex-shrink:0">
+      <button onclick="closeManual()" style="width:100%;padding:12px;border-radius:9px;border:1.5px solid rgba(200,180,255,.25);background:rgba(200,180,255,.07);color:rgba(200,180,255,.8);font-family:'Cinzel',serif;font-size:11px;font-weight:700;letter-spacing:2px;cursor:pointer">✕ CERRAR GRIMORIO</button>
+    </div>`;
+  document.body.appendChild(ov);
+}
+
+function spellRow(k,s){
+  const tags=[];
+  if(s.dmg) tags.push(`<div class="mtag d">-${s.dmg}hp</div>`);
+  if(s.heal) tags.push(`<div class="mtag h">+${s.heal}hp</div>`);
+  if(s.shield) tags.push(`<div class="mtag s">🛡️</div>`);
+  if(s.reflect) tags.push(`<div class="mtag sp">${Math.round(s.reflect*100)}% rebote</div>`);
+  tags.push(`<div class="mtag c">${s.cost}⚡</div>`);
+  if(s.legendary) tags.push(`<div class="mtag sp">⭐ legendario</div>`);
+  return `<div class="mspell"><div class="mspell-icon">${s.icon}</div><div class="mspell-info"><div class="mspell-name">${s.name}</div><div class="mspell-tags">${tags.join('')}</div></div></div>`;
+}
+
+function mShowSec(id,tab){
+  document.querySelectorAll('.msec').forEach(s=>s.classList.remove('on'));
+  document.querySelectorAll('.mnav-tab').forEach(t=>t.classList.remove('on'));
+  document.getElementById('msec-'+id).classList.add('on');
+  tab.classList.add('on');
+}
+
+function closeManual(){
+  document.getElementById('manual-overlay')?.remove();
 }
 
 function isVoice(){return !!(window.SpeechRecognition||window.webkitSpeechRecognition);}
