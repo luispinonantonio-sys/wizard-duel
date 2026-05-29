@@ -422,6 +422,7 @@ input.code-inp:focus{border-color:#60a5fa}
 
   <div id="room-btns">
     <button class="btn btn-gold" onclick="createRoom()">⚡ CREAR SALA</button>
+  <button class="btn" onclick="playVsCpu()" style="border:1.5px solid #a855f7;background:rgba(168,85,247,.12);color:#a855f7;margin-bottom:8px">🤖 JUGAR VS CPU</button>
     <div class="join-row">
       <input class="code-inp" id="join-code" maxlength="4" placeholder="CÓDIGO" oninput="this.value=this.value.toUpperCase()" autocomplete="off">
       <button class="btn btn-blue" onclick="joinRoom()">UNIRSE AL DUELO</button>
@@ -609,7 +610,7 @@ let G={
   profile:null,selectedPath:null,selectedAvatar:'🧙',
   myEnergy:100,oppEnergy:100,currentHand:[],
   myIndex:null,myHP:100,oppHP:100,
-  myTurn:false,counterActive:false,roundActive:false,myChose:false,
+  myTurn:false,counterActive:false,roundActive:false,myChose:false,isCpu:false,
   listening:false,recognition:null,atkRec:null,
   counterInterval:null,counterStartTs:0,castInterval:null,
 };
@@ -861,6 +862,13 @@ function selPath(k){
   G.selectedPath=k;
 }
 function setLobbyMsg(t,cls){const el=document.getElementById('lobby-msg');el.textContent=t;el.className='msg '+(cls||'');}
+function playVsCpu(){
+  const path=G.profile?.path||G.selectedPath;
+  if(!path){setLobbyMsg('Necesitas un camino para jugar vs CPU','err');return;}
+  socket.emit('play_vs_cpu');
+  setLobbyMsg('Preparando CPU...','wait');
+}
+
 function createRoom(){
   const path=G.profile?.path||G.selectedPath;
   if(!path){setLobbyMsg('Elige tu camino primero','err');return;}
@@ -883,8 +891,8 @@ socket.on('room_created',({code})=>{
 socket.on('error',({msg})=>setLobbyMsg(msg,'err'));
 
 // ── DUEL START ────────────────────────────────────────────────────────────────
-socket.on('duel_start',({yourIndex,yourLevel,oppLevel,oppName,oppAvatar})=>{
-  G.myIndex=yourIndex; G.myHP=100; G.oppHP=100; G.myEnergy=100; G.oppEnergy=100; G.myTurn=yourIndex===0;
+socket.on('duel_start',({yourIndex,yourLevel,oppLevel,oppName,oppAvatar,isCpu,cpuPath,cpuPathName})=>{
+  G.myIndex=yourIndex; G.myHP=100; G.oppHP=100; G.myEnergy=100; G.oppEnergy=100; G.myTurn=yourIndex===0; G.isCpu=!!isCpu;
   updateBars(); updateEnergyBars(); // reset bars visually
   resetCounterPanel(); // reset counter panel
   document.getElementById('lobby-screen').style.display='none';
@@ -903,7 +911,7 @@ socket.on('duel_start',({yourIndex,yourLevel,oppLevel,oppName,oppAvatar})=>{
   document.getElementById('p-name').textContent=myAv+' '+G.profile.username.toUpperCase();
   document.getElementById('p-lvl').textContent=myM.icon+' '+myM.name+' · '+G.profile.counterSecs+'s';
   document.getElementById('opp-name').textContent=oppAv+' '+oppName.toUpperCase();
-  document.getElementById('opp-lvl').textContent=opM.icon+' '+opM.name;
+  document.getElementById('opp-lvl').textContent=isCpu?(cpuPathName||'CPU'):(opM.icon+' '+opM.name);
   document.getElementById('psp-badge').textContent=myM.icon;
   document.getElementById('esp-badge').textContent=opM.icon;
   _initAudio();
@@ -1115,11 +1123,15 @@ socket.on('energy_update',({p0,p1})=>{
 socket.on('game_over',({winner,xpResult,newProfile})=>{
   const iWon=winner===G.myIndex;
   if(newProfile)G.profile=newProfile;
-  clearInterval(G.castInterval); resetCastTimer();  // stop cast timer
-  stopListen();                                       // stop mic
-  musicStop(true); // immediate stop
+  clearInterval(G.castInterval); resetCastTimer();
+  stopListen();
+  musicStop(true);
   setTimeout(()=>playSound(iWon?'victory':'defeat'),400);
-  showXPResult(iWon,xpResult,newProfile);
+  if(G.isCpu){
+    showCpuResult(iWon);
+  } else {
+    showXPResult(iWon,xpResult,newProfile);
+  }
 });
 socket.on('opponent_disconnected',()=>{ musicStop(); showXPResult(true,null,null,true); });
 socket.on('opponent_reconnected',()=>{ addLog('🔄 ¡El rival reconectó!','hl'); });
@@ -1212,6 +1224,31 @@ function showXPResult(iWon,xpResult,newProfile,disconnected){
   h+=`<button class="btn btn-gold" onclick="goLobby()">⚡ VOLVER AL CASTILLO</button>`;
   ov.innerHTML=h;document.body.appendChild(ov);
 }
+function showCpuResult(iWon){
+  const ov=document.createElement('div'); ov.className='xp-overlay';
+  ov.innerHTML=`
+    <div class="xp-title ${iWon?'win':'loss'}">${iWon?'🏆 ¡VENCISTE A LA CPU!':'💀 La CPU ganó esta vez'}</div>
+    <div style="color:rgba(200,180,255,.6);font-size:13px;font-style:italic;margin:10px 0 6px;font-family:serif">
+      ${iWon?'Buen trabajo — ahora desafía a un rival real':'Sigue practicando y vuelve a intentarlo'}
+    </div>
+    <div style="background:rgba(168,85,247,.1);border:1px solid rgba(168,85,247,.3);border-radius:10px;padding:10px 16px;margin-bottom:16px;font-family:Cinzel,serif;font-size:11px;color:#a855f7;letter-spacing:1px">
+      🤖 MODO PRÁCTICA — Sin XP
+    </div>
+    <button class="btn btn-gold" onclick="playVsCpuAgain()">🤖 REVANCHE VS CPU</button>
+    <button class="btn btn-ghost" onclick="goLobby()" style="margin-top:0">⚡ VOLVER AL CASTILLO</button>`;
+  document.body.appendChild(ov);
+}
+
+function playVsCpuAgain(){
+  document.querySelector('.xp-overlay')?.remove();
+  document.getElementById('game').style.display='none';
+  G.myIndex=null;G.myHP=100;G.oppHP=100;G.myEnergy=100;G.oppEnergy=100;
+  G.myTurn=false;G.counterActive=false;G.roundActive=false;G.myChose=false;G.isCpu=false;
+  clearInterval(G.counterInterval);clearInterval(G.castInterval);
+  resetCastTimer(); resetCounterPanel(); stopListen();
+  playVsCpu();
+}
+
 function goLobby(){
   document.querySelector('.xp-overlay')?.remove();
   document.getElementById('game').style.display='none';
