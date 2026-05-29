@@ -878,6 +878,7 @@ socket.on('game_over',({winner,xpResult,newProfile})=>{
   showXPResult(iWon,xpResult,newProfile);
 });
 socket.on('opponent_disconnected',()=>{ musicStop(); showXPResult(true,null,null,true); });
+socket.on('opponent_reconnected',()=>{ addLog('🔄 ¡El rival reconectó!','hl'); });
 
 // ── COUNTER UI ────────────────────────────────────────────────────────────────
 function showCounterChallenge(phrase,secs,rawDmg){
