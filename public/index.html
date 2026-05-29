@@ -139,14 +139,14 @@ input.field::placeholder{color:rgba(200,180,255,.35)}
 .codebox-big{font-family:'Cinzel',serif;color:var(--gold);font-size:42px;font-weight:700;letter-spacing:8px;text-shadow:0 0 18px rgba(232,200,122,.5)}
 .codebox-sub{font-size:11px;color:rgba(200,180,255,.45);margin-top:5px;font-style:italic}
 
-.join-row{display:flex;gap:8px;margin-bottom:8px}
+.join-row{display:flex;flex-direction:column;gap:8px;margin-bottom:8px}
 input.code-inp{
-  flex:1;padding:13px 10px;
+  width:100%;padding:14px 10px;
   border-radius:var(--r);border:1.5px solid rgba(200,180,255,.25);
   background:rgba(255,255,255,.07);color:#fff;
-  font-family:'Cinzel',serif;font-size:22px;font-weight:700;
-  letter-spacing:6px;text-transform:uppercase;text-align:center;
-  outline:none;min-height:52px;
+  font-family:'Cinzel',serif;font-size:28px;font-weight:700;
+  letter-spacing:8px;text-transform:uppercase;text-align:center;
+  outline:none;min-height:56px;
 }
 input.code-inp:focus{border-color:#60a5fa}
 
@@ -364,7 +364,7 @@ input.code-inp:focus{border-color:#60a5fa}
     <button class="btn btn-gold" onclick="createRoom()">⚡ CREAR SALA</button>
     <div class="join-row">
       <input class="code-inp" id="join-code" maxlength="4" placeholder="CÓDIGO" oninput="this.value=this.value.toUpperCase()" autocomplete="off">
-      <button class="btn btn-blue" onclick="joinRoom()" style="flex:0 0 auto;width:auto;padding:0 20px;margin-bottom:0">UNIRSE</button>
+      <button class="btn btn-blue" onclick="joinRoom()">UNIRSE AL DUELO</button>
     </div>
   </div>
   <div class="msg" id="lobby-msg"></div>
