@@ -4,60 +4,97 @@ const { Server } = require('socket.io');
 const bcrypt = require('bcryptjs');
 const path = require('path');
 const fs = require('fs');
-const Database = require('better-sqlite3');
+const initSqlJs = require('sql.js');
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 app.use(express.static(path.join(__dirname, 'public')));
 
-// ─── DATABASE SETUP ───────────────────────────────────────────────────────────
+// ─── DATABASE SETUP (sql.js — pure JS, no native compilation needed) ─────────
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'data', 'wizard.db');
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 
-const db = new Database(DB_PATH);
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
+let db;
 
-db.exec(`
-  CREATE TABLE IF NOT EXISTS profiles (
-    username      TEXT PRIMARY KEY,
-    password_hash TEXT NOT NULL,
-    avatar        TEXT NOT NULL DEFAULT '🧙',
-    xp            INTEGER NOT NULL DEFAULT 0,
-    level         INTEGER NOT NULL DEFAULT 1,
-    streak        INTEGER NOT NULL DEFAULT 0,
-    last_win      INTEGER,
-    wins          INTEGER NOT NULL DEFAULT 0,
-    losses        INTEGER NOT NULL DEFAULT 0,
-    counters_ok   INTEGER NOT NULL DEFAULT 0,
-    counters_fail INTEGER NOT NULL DEFAULT 0,
-    combos        INTEGER NOT NULL DEFAULT 0,
-    total_rxn_ms  INTEGER NOT NULL DEFAULT 0,
-    rxn_samples   INTEGER NOT NULL DEFAULT 0,
-    created_at    INTEGER NOT NULL DEFAULT (unixepoch())
-  );
-`);
-
-// Safely add avatar column for existing DBs that don't have it yet
-try {
-  db.exec(`ALTER TABLE profiles ADD COLUMN avatar TEXT NOT NULL DEFAULT '🧙'`);
-  console.log('avatar column added');
-} catch(e) {
-  // column already exists — ignore
+function saveDb() {
+  try {
+    const data = db.export();
+    fs.writeFileSync(DB_PATH, Buffer.from(data));
+  } catch(e) { console.error('DB save error:', e.message); }
 }
 
+async function initDb() {
+  const SQL = await initSqlJs();
+  if (fs.existsSync(DB_PATH)) {
+    const fileBuffer = fs.readFileSync(DB_PATH);
+    db = new SQL.Database(fileBuffer);
+    console.log('Loaded existing DB from', DB_PATH);
+  } else {
+    db = new SQL.Database();
+    console.log('Created new DB at', DB_PATH);
+  }
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS profiles (
+      username      TEXT PRIMARY KEY,
+      password_hash TEXT NOT NULL,
+      avatar        TEXT NOT NULL DEFAULT '🧙',
+      xp            INTEGER NOT NULL DEFAULT 0,
+      level         INTEGER NOT NULL DEFAULT 1,
+      streak        INTEGER NOT NULL DEFAULT 0,
+      last_win      INTEGER,
+      wins          INTEGER NOT NULL DEFAULT 0,
+      losses        INTEGER NOT NULL DEFAULT 0,
+      counters_ok   INTEGER NOT NULL DEFAULT 0,
+      counters_fail INTEGER NOT NULL DEFAULT 0,
+      combos        INTEGER NOT NULL DEFAULT 0,
+      total_rxn_ms  INTEGER NOT NULL DEFAULT 0,
+      rxn_samples   INTEGER NOT NULL DEFAULT 0,
+      created_at    INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+    )
+  `);
+
+  try { db.run(`ALTER TABLE profiles ADD COLUMN avatar TEXT NOT NULL DEFAULT '🧙'`); }
+  catch(e) { /* already exists */ }
+
+  saveDb();
+  // Auto-save every 30 seconds
+  setInterval(saveDb, 30000);
+}
+
+// ─── DB HELPERS (replicate better-sqlite3 API) ───────────────────────────────
 const stmts = {
-  findUser:      db.prepare('SELECT * FROM profiles WHERE username = ?'),
-  insertUser:    db.prepare('INSERT INTO profiles (username, password_hash, avatar) VALUES (@username, @password_hash, @avatar)'),
-  updateProfile: db.prepare(`
-    UPDATE profiles SET
-      xp=@xp, level=@level, streak=@streak, last_win=@last_win,
-      wins=@wins, losses=@losses, counters_ok=@counters_ok,
-      counters_fail=@counters_fail, combos=@combos,
-      total_rxn_ms=@total_rxn_ms, rxn_samples=@rxn_samples
-    WHERE username=@username
-  `),
+  findUser(username) {
+    const res = db.exec('SELECT * FROM profiles WHERE username = ?', [username]);
+    if (!res.length || !res[0].values.length) return null;
+    const cols = res[0].columns;
+    const row = res[0].values[0];
+    const obj = {};
+    cols.forEach((c, i) => obj[c] = row[i]);
+    return obj;
+  },
+  insertUser({ username, password_hash, avatar }) {
+    db.run('INSERT INTO profiles (username, password_hash, avatar) VALUES (?, ?, ?)',
+      [username, password_hash, avatar || '🧙']);
+    saveDb();
+  },
+  updateProfile(p) {
+    db.run(`UPDATE profiles SET
+      xp=?, level=?, streak=?, last_win=?,
+      wins=?, losses=?, counters_ok=?, counters_fail=?,
+      combos=?, total_rxn_ms=?, rxn_samples=?
+      WHERE username=?`,
+      [p.xp, p.level, p.streak||0, p.last_win||null,
+       p.wins, p.losses, p.counters_ok, p.counters_fail,
+       p.combos, p.total_rxn_ms, p.rxn_samples,
+       p.username]);
+    saveDb();
+  },
+  updateAvatar(username, avatar) {
+    db.run('UPDATE profiles SET avatar=? WHERE username=?', [avatar, username]);
+    saveDb();
+  },
 };
 
 function rowToProfile(row) {
@@ -74,7 +111,7 @@ function rowToProfile(row) {
 }
 
 function saveProfile(p) {
-  stmts.updateProfile.run({
+  stmts.updateProfile({
     username: p.username, xp: p.xp, level: p.level,
     streak: p.streak || 0, last_win: p.lastWin || null,
     wins: p.stats.wins, losses: p.stats.losses,
@@ -241,13 +278,13 @@ io.on('connection', socket => {
     if (!password || password.length < 3) {
       socket.emit('auth_error', { msg: 'Contraseña: mínimo 3 caracteres' }); return;
     }
-    if (stmts.findUser.get(u)) {
+    if (stmts.findUser(u)) {
       socket.emit('auth_error', { msg: 'Ese nombre ya existe — inicia sesión' }); return;
     }
     const hash = await bcrypt.hash(password, 8);
     const av = avatar && avatar.length <= 8 ? avatar : '🧙';
-    stmts.insertUser.run({ username: u, password_hash: hash, avatar: av });
-    const profile = rowToProfile(stmts.findUser.get(u));
+    stmts.insertUser({ username: u, password_hash: hash, avatar: av });
+    const profile = rowToProfile(stmts.findUser(u));
     socket.username = u;
     socket.emit('auth_ok', publicProfile(profile));
     console.log('registered:', u);
@@ -255,7 +292,7 @@ io.on('connection', socket => {
 
   socket.on('login', async ({ username, password }) => {
     const u = username.trim().toLowerCase();
-    const row = stmts.findUser.get(u);
+    const row = stmts.findUser(u);
     if (!row) { socket.emit('auth_error', { msg: 'Usuario no encontrado' }); return; }
     const ok = await bcrypt.compare(password, row.password_hash);
     if (!ok) { socket.emit('auth_error', { msg: 'Contraseña incorrecta' }); return; }
@@ -286,7 +323,7 @@ io.on('connection', socket => {
   socket.on('reconnect_session', ({ username }) => {
     if (!username) return;
     const u = username.trim().toLowerCase();
-    const row = stmts.findUser.get(u);
+    const row = stmts.findUser(u);
     if (!row) { socket.emit('session_invalid'); return; }
     socket.username = u;
     sessionByUser[u] = true;
@@ -316,8 +353,8 @@ io.on('connection', socket => {
         }
         // if duel was in progress, send state to reconnected player
         if (room.sockets[0] && room.sockets[1]) {
-          const p0row = stmts.findUser.get(room.state.players[0].username);
-          const p1row = stmts.findUser.get(room.state.players[1].username);
+          const p0row = stmts.findUser(room.state.players[0].username);
+          const p1row = stmts.findUser(room.state.players[1].username);
           const p0 = p0row ? rowToProfile(p0row) : null;
           const p1 = p1row ? rowToProfile(p1row) : null;
           socket.emit('session_restored', {
@@ -342,15 +379,15 @@ io.on('connection', socket => {
     if (!socket.username) { socket.emit('error', { msg: 'Inicia sesión primero' }); return; }
     const valid = ['🧙','🧙‍♀️','🧝','🧝‍♀️','👸','🤴','🧚','🐱','👹','🧟','🐲','🦉'];
     const av = valid.includes(avatar) ? avatar : '🧙';
-    db.prepare('UPDATE profiles SET avatar=? WHERE username=?').run(av, socket.username);
-    const row = stmts.findUser.get(socket.username);
+    stmts.updateAvatar(socket.username, av);
+    const row = stmts.findUser(socket.username);
     socket.emit('avatar_updated', publicProfile(rowToProfile(row)));
   });
 
   // ─── LOBBY ────────────────────────────────────────────────────────────────
   socket.on('create_room', ({ path }) => {
     if (!socket.username) { socket.emit('error', { msg: 'Inicia sesión primero' }); return; }
-    const row = stmts.findUser.get(socket.username);
+    const row = stmts.findUser(socket.username);
     const profile = row ? rowToProfile(row) : null;
     if (!profile) { socket.emit('error', { msg: 'Perfil no encontrado' }); return; }
     const level = calcLevel(profile.xp);
@@ -385,8 +422,8 @@ io.on('connection', socket => {
     }
     if (room.sockets[1]) { socket.emit('error', { msg: 'Sala llena' }); return; }
 
-    const r1 = stmts.findUser.get(socket.username);
-    const r0 = stmts.findUser.get(room.state.players[0].username);
+    const r1 = stmts.findUser(socket.username);
+    const r0 = stmts.findUser(room.state.players[0].username);
     const p1 = r1 ? rowToProfile(r1) : null;
     const p0 = r0 ? rowToProfile(r0) : null;
 
@@ -467,7 +504,7 @@ io.on('connection', socket => {
     if (s.dmg > 0) {
       const rawDmg = Math.round(s.dmg * mults.dmg);
       const targetUsername = room.state.players[ti].username;
-      const targetRow = stmts.findUser.get(targetUsername);
+      const targetRow = stmts.findUser(targetUsername);
       const targetProfile = targetRow ? rowToProfile(targetRow) : null;
       const targetLevel = targetProfile ? calcLevel(targetProfile.xp) : LEVELS[0];
       const secs = targetLevel.counterSecs;
@@ -582,8 +619,8 @@ function checkWin(code, room) {
 
   const winnerUsername = room.state.players[winnerIdx].username;
   const loserUsername  = room.state.players[loserIdx].username;
-  const wRow = stmts.findUser.get(winnerUsername);
-  const lRow = stmts.findUser.get(loserUsername);
+  const wRow = stmts.findUser(winnerUsername);
+  const lRow = stmts.findUser(loserUsername);
   const wp = wRow ? rowToProfile(wRow) : null;
   const lp = lRow ? rowToProfile(lRow) : null;
 
@@ -692,8 +729,14 @@ function publicProfile(p, pendingRoom) {
 
 const PORT = process.env.PORT || 3000;
 const INSTANCE_ID = Math.random().toString(36).substring(2,6).toUpperCase();
-server.listen(PORT, () => {
-  console.log(`Wizard Duel v2 running on port ${PORT} — instance ${INSTANCE_ID}`);
+
+initDb().then(() => {
+  server.listen(PORT, () => {
+    console.log(`Wizard Duel v2 running on port ${PORT} — instance ${INSTANCE_ID}`);
+  });
+}).catch(err => {
+  console.error('Failed to init DB:', err);
+  process.exit(1);
 });
 
 // Log active rooms every 30s so we can debug missing rooms
