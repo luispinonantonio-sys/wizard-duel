@@ -40,6 +40,7 @@ async function initDb() {
       username      TEXT PRIMARY KEY,
       password_hash TEXT NOT NULL,
       avatar        TEXT NOT NULL DEFAULT '🧙',
+      path          TEXT NOT NULL DEFAULT '',
       xp            INTEGER NOT NULL DEFAULT 0,
       level         INTEGER NOT NULL DEFAULT 1,
       streak        INTEGER NOT NULL DEFAULT 0,
@@ -55,8 +56,8 @@ async function initDb() {
     )
   `);
 
-  try { db.run(`ALTER TABLE profiles ADD COLUMN avatar TEXT NOT NULL DEFAULT '🧙'`); }
-  catch(e) { /* already exists */ }
+  try { db.run(`ALTER TABLE profiles ADD COLUMN avatar TEXT NOT NULL DEFAULT '🧙'`); } catch(e) {}
+  try { db.run(`ALTER TABLE profiles ADD COLUMN path TEXT NOT NULL DEFAULT ''`); } catch(e) {}
 
   saveDb();
   // Auto-save every 30 seconds
@@ -74,9 +75,13 @@ const stmts = {
     cols.forEach((c, i) => obj[c] = row[i]);
     return obj;
   },
-  insertUser({ username, password_hash, avatar }) {
-    db.run('INSERT INTO profiles (username, password_hash, avatar) VALUES (?, ?, ?)',
-      [username, password_hash, avatar || '🧙']);
+  insertUser({ username, password_hash, avatar, path }) {
+    db.run('INSERT INTO profiles (username, password_hash, avatar, path) VALUES (?, ?, ?, ?)',
+      [username, password_hash, avatar || '🧙', path || '']);
+    saveDb();
+  },
+  updatePath(username, path) {
+    db.run('UPDATE profiles SET path=? WHERE username=?', [path, username]);
     saveDb();
   },
   updateProfile(p) {
@@ -101,6 +106,7 @@ function rowToProfile(row) {
   return {
     username: row.username, passwordHash: row.password_hash,
     avatar: row.avatar || '🧙',
+    path: row.path || '',
     xp: row.xp, level: row.level, streak: row.streak, lastWin: row.last_win,
     stats: {
       wins: row.wins, losses: row.losses,
@@ -199,7 +205,81 @@ const SPELLS = {
 };
 
 const MAX_ENERGY = 100;
-const ENERGY_REGEN = 12; // per second
+const ENERGY_REGEN = 12;
+
+// ── COMPLETE SPELL CATALOG ────────────────────────────────────────────────────
+const CATALOG = {
+  aturdir:       { dmg:25, cost:25, power:1 },
+  expulsar:      { dmg:20, cost:20, power:1 },
+  escudo:        { shield:true, cost:28, power:0 },
+  // destructor
+  quemar:        { dmg:35, cost:40, power:2 },
+  destruir:      { dmg:45, cost:50, power:2 },
+  golpe:         { dmg:18, cost:15, power:1 },
+  impacto:       { dmg:28, cost:30, power:1 },
+  tormenta:      { dmg:38, cost:42, power:2 },
+  rafaga:        { dmg:22, cost:18, power:1 },
+  aniquilar:     { dmg:50, cost:55, power:3 },
+  caos_total:    { dmg:60, cost:65, power:3, legendary:true },
+  // guardian
+  sanar:         { heal:20, cost:25, power:0 },
+  refugio:       { heal:12, cost:15, power:0 },
+  barrera:       { shield:true, cost:22, power:0 },
+  restaurar:     { heal:30, cost:35, power:0 },
+  reflejo:       { reflect:0.6, cost:35, power:2 },
+  golpe_sagrado: { dmg:30, cost:38, power:2, bonus:'hp_advantage' },
+  curar_mayor:   { heal:40, cost:45, power:0 },
+  escudo_doble:  { shield:true, dmg:15, cost:40, power:0 },
+  marea_sagrada: { dmg:20, heal:20, cost:42, power:2 },
+  fortaleza:     { shield:true, heal:50, cost:60, power:0, legendary:true },
+  // trickster
+  confundir:     { dmg:15, cost:25, power:1, stun:true },
+  desgarrar:     { dmg:40, cost:45, power:2 },
+  engañar:       { dmg:20, cost:20, power:1, bonus:'pierce_shield' },
+  desviar:       { shield:true, cost:28, power:0 },
+  invertir:      { dmg:22, cost:22, power:1 },
+  ilusion:       { dmg:18, cost:15, power:1, bonus:'looks_like_shield' },
+  trampa:        { dmg:35, cost:38, power:2, bonus:'clash_bonus' },
+  robar:         { dmg:20, heal:20, cost:40, power:2 },
+  caos_puro:     { dmg:55, cost:60, power:3, legendary:true },
+};
+
+// Spells per path ordered by unlock (wins needed)
+const PATH_SPELLS = {
+  destructor: [
+    {key:'aturdir',unlock:0},{key:'expulsar',unlock:0},{key:'escudo',unlock:0},
+    {key:'golpe',unlock:0},{key:'impacto',unlock:0},{key:'quemar',unlock:0},{key:'destruir',unlock:0},
+    {key:'tormenta',unlock:3},{key:'rafaga',unlock:6},{key:'aniquilar',unlock:9},{key:'caos_total',unlock:12},
+  ],
+  guardian: [
+    {key:'aturdir',unlock:0},{key:'expulsar',unlock:0},{key:'escudo',unlock:0},
+    {key:'sanar',unlock:0},{key:'refugio',unlock:0},{key:'barrera',unlock:0},
+    {key:'restaurar',unlock:3},{key:'reflejo',unlock:3},
+    {key:'golpe_sagrado',unlock:6},{key:'curar_mayor',unlock:6},
+    {key:'escudo_doble',unlock:9},{key:'marea_sagrada',unlock:9},{key:'fortaleza',unlock:12},
+  ],
+  trickster: [
+    {key:'aturdir',unlock:0},{key:'expulsar',unlock:0},{key:'escudo',unlock:0},
+    {key:'confundir',unlock:0},{key:'desgarrar',unlock:0},{key:'engañar',unlock:0},
+    {key:'desviar',unlock:0},{key:'invertir',unlock:0},
+    {key:'ilusion',unlock:3},{key:'trampa',unlock:6},{key:'robar',unlock:9},{key:'caos_puro',unlock:12},
+  ],
+};
+
+function getUnlockedSpells(path, wins) {
+  const spells = PATH_SPELLS[path] || PATH_SPELLS.destructor;
+  return spells.filter(s => wins >= s.unlock).map(s => s.key);
+}
+
+function drawHand(unlockedSpells) {
+  // shuffle and take 4
+  const arr = [...unlockedSpells];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr.slice(0, Math.min(4, arr.length));
+}
 const CAST_SECS = 4; // fixed time to choose a spell each turn
 
 const COUNTER_PHRASES = [
@@ -244,8 +324,10 @@ function makeRoomState() {
   return {
     players: [
       { hp:100, energy:MAX_ENERGY, shield:false, stun:false, path:null, username:null,
+        wins:0, hand:[],
         countersOk:0, countersFail:0, combos:0, reactionTimes:[], choice:null, choiceTime:0 },
       { hp:100, energy:MAX_ENERGY, shield:false, stun:false, path:null, username:null,
+        wins:0, hand:[],
         countersOk:0, countersFail:0, combos:0, reactionTimes:[], choice:null, choiceTime:0 },
     ],
     phase: 'simultaneous', // simultaneous | resolving | gameover
@@ -265,26 +347,25 @@ function startRound(code, room, io) {
   room.state.players[1].choice = null;
   room.state.phase = 'simultaneous';
 
-  // shuffle spell orders per player
-  const PATH_SPELLS = {
-    destructor: ['aturdir','destruir','expulsar','quemar'],
-    guardian:   ['escudo','sanar','expulsar','restaurar'],
-    trickster:  ['confundir','expulsar','aturdir','desgarrar'],
-  };
-  const order0 = shuffle(PATH_SPELLS[room.state.players[0].path] || PATH_SPELLS.destructor);
-  const order1 = shuffle(PATH_SPELLS[room.state.players[1].path] || PATH_SPELLS.destructor);
+  // deal 4 cards from each player's unlocked arsenal
+  const unlocked0 = getUnlockedSpells(room.state.players[0].path, room.state.players[0].wins);
+  const unlocked1 = getUnlockedSpells(room.state.players[1].path, room.state.players[1].wins);
+  const order0 = drawHand(unlocked0);
+  const order1 = drawHand(unlocked1);
+  room.state.players[0].hand = order0;
+  room.state.players[1].hand = order1;
 
   const deadline = Date.now() + ROUND_SECS * 1000;
   room.state.roundDeadline = deadline;
 
   // send round_start to each player with their own spell order
   if (room.sockets[0]) room.sockets[0].emit('round_start', {
-    spellOrder: order0, secs: ROUND_SECS, deadline,
+    spellOrder: order0, hand: order0, secs: ROUND_SECS, deadline,
     myEnergy: room.state.players[0].energy,
     oppEnergy: room.state.players[1].energy,
   });
   if (room.sockets[1]) room.sockets[1].emit('round_start', {
-    spellOrder: order1, secs: ROUND_SECS, deadline,
+    spellOrder: order1, hand: order1, secs: ROUND_SECS, deadline,
     myEnergy: room.state.players[1].energy,
     oppEnergy: room.state.players[0].energy,
   });
@@ -302,7 +383,7 @@ function startRound(code, room, io) {
 io.on('connection', socket => {
   console.log('connected:', socket.id);
 
-  socket.on('register', async ({ username, password, avatar }) => {
+  socket.on('register', async ({ username, password, avatar, path }) => {
     if (!db) { socket.emit('auth_error', { msg: 'Servidor iniciando, intenta en unos segundos' }); return; }
     const u = username.trim().toLowerCase();
     if (!u || u.length < 2 || u.length > 20) {
@@ -316,7 +397,8 @@ io.on('connection', socket => {
     }
     const hash = await bcrypt.hash(password, 8);
     const av = avatar && avatar.length <= 8 ? avatar : '🧙';
-    stmts.insertUser({ username: u, password_hash: hash, avatar: av });
+    const pt = ['destructor','guardian','trickster'].includes(path) ? path : '';
+    stmts.insertUser({ username: u, password_hash: hash, avatar: av, path: pt });
     const profile = rowToProfile(stmts.findUser(u));
     socket.username = u;
     socket.emit('auth_ok', publicProfile(profile));
@@ -434,8 +516,9 @@ io.on('connection', socket => {
     const level = calcLevel(profile.xp);
     const code = makeCode();  // already uppercase
     const state = makeRoomState();
-    state.players[0].path = path;
+    state.players[0].path = profile.path || 'destructor';
     state.players[0].username = socket.username;
+    state.players[0].wins = profile.stats ? profile.stats.wins : 0;
     // clear any old room for this user before creating new one
     const oldCode = roomByUser[socket.username];
     if (oldCode && rooms[oldCode]) {
@@ -475,8 +558,9 @@ io.on('connection', socket => {
       deleteRoom(joinerOldCode);
     }
     room.sockets[1] = socket;
-    room.state.players[1].path = path;
+    room.state.players[1].path = p1 ? p1.path : 'destructor';
     room.state.players[1].username = socket.username;
+    room.state.players[1].wins = p1 ? p1.stats.wins : 0;
     socket.join(code.toUpperCase());
     socket.roomCode = code.toUpperCase();
     socket.playerIndex = 1;
@@ -529,6 +613,11 @@ io.on('connection', socket => {
     if (!s) return;
     if (room.state.players[pi].energy < s.cost) {
       socket.emit('no_energy', { needed: s.cost, have: room.state.players[pi].energy });
+      return;
+    }
+    // validate spell is in player's hand
+    if (!room.state.players[pi].hand.includes(spell)) {
+      socket.emit('no_energy', { needed: 0, have: 0, msg: 'Hechizo no disponible' });
       return;
     }
     room.state.players[pi].choice = spell;
@@ -610,8 +699,8 @@ function resolveRound(code, room, io) {
 
   const p0 = room.state.players[0], p1 = room.state.players[1];
   const c0 = p0.choice, c1 = p1.choice;
-  const s0 = c0 ? SPELLS[c0] : null;
-  const s1 = c1 ? SPELLS[c1] : null;
+  const s0 = c0 ? CATALOG[c0] : null;
+  const s1 = c1 ? CATALOG[c1] : null;
   const m0 = PATH_MULTS[p0.path] || { dmg:1, heal:1 };
   const m1 = PATH_MULTS[p1.path] || { dmg:1, heal:1 };
 
@@ -678,12 +767,19 @@ function resolveRound(code, room, io) {
     if (regenTicks >= 20) clearInterval(regenInterval); // 2 seconds of regen
   }, 100);
 
+  // deal new hands for next round
+  const newHand0 = drawHand(getUnlockedSpells(p0.path, p0.wins));
+  const newHand1 = drawHand(getUnlockedSpells(p1.path, p1.wins));
+  room.state.players[0].hand = newHand0;
+  room.state.players[1].hand = newHand1;
+
   // emit result to both players
   io.to(code).emit('round_result', {
     result,
     spell0: c0, spell1: c1,
     p0hp: p0.hp, p1hp: p1.hp,
     p0energy: Math.round(p0.energy), p1energy: Math.round(p1.energy),
+    hand0: newHand0, hand1: newHand1,
   });
 
   checkWin(code, room);
@@ -809,6 +905,7 @@ function publicProfile(p, pendingRoom) {
   return {
     username: p.username,
     avatar,
+    path: p.path || '',
     pendingRoom: pending,
     xp: p.xp,
     level: level.n,
