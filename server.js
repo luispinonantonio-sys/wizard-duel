@@ -23,6 +23,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS profiles (
     username      TEXT PRIMARY KEY,
     password_hash TEXT NOT NULL,
+    avatar        TEXT NOT NULL DEFAULT '🧙',
     xp            INTEGER NOT NULL DEFAULT 0,
     level         INTEGER NOT NULL DEFAULT 1,
     streak        INTEGER NOT NULL DEFAULT 0,
@@ -36,11 +37,13 @@ db.exec(`
     rxn_samples   INTEGER NOT NULL DEFAULT 0,
     created_at    INTEGER NOT NULL DEFAULT (unixepoch())
   );
+  -- add avatar column if upgrading from older DB
+  ALTER TABLE profiles ADD COLUMN avatar TEXT NOT NULL DEFAULT '🧙';
 `);
 
 const stmts = {
   findUser:      db.prepare('SELECT * FROM profiles WHERE username = ?'),
-  insertUser:    db.prepare('INSERT INTO profiles (username, password_hash) VALUES (@username, @password_hash)'),
+  insertUser:    db.prepare('INSERT INTO profiles (username, password_hash, avatar) VALUES (@username, @password_hash, @avatar)'),
   updateProfile: db.prepare(`
     UPDATE profiles SET
       xp=@xp, level=@level, streak=@streak, last_win=@last_win,
@@ -54,6 +57,7 @@ const stmts = {
 function rowToProfile(row) {
   return {
     username: row.username, passwordHash: row.password_hash,
+    avatar: row.avatar || '🧙',
     xp: row.xp, level: row.level, streak: row.streak, lastWin: row.last_win,
     stats: {
       wins: row.wins, losses: row.losses,
@@ -217,7 +221,7 @@ function emitTurnChange(code, room, io) {
 io.on('connection', socket => {
   console.log('connected:', socket.id);
 
-  socket.on('register', async ({ username, password }) => {
+  socket.on('register', async ({ username, password, avatar }) => {
     const u = username.trim().toLowerCase();
     if (!u || u.length < 2 || u.length > 20) {
       socket.emit('auth_error', { msg: 'Nombre: 2–20 caracteres' }); return;
@@ -229,7 +233,8 @@ io.on('connection', socket => {
       socket.emit('auth_error', { msg: 'Ese nombre ya existe — inicia sesión' }); return;
     }
     const hash = await bcrypt.hash(password, 8);
-    stmts.insertUser.run({ username: u, password_hash: hash });
+    const av = avatar && avatar.length <= 8 ? avatar : '🧙';
+    stmts.insertUser.run({ username: u, password_hash: hash, avatar: av });
     const profile = rowToProfile(stmts.findUser.get(u));
     socket.username = u;
     socket.emit('auth_ok', publicProfile(profile));
@@ -245,6 +250,15 @@ io.on('connection', socket => {
     socket.username = u;
     socket.emit('auth_ok', publicProfile(rowToProfile(row)));
     console.log('login:', u);
+  });
+
+  socket.on('update_avatar', ({ avatar }) => {
+    if (!socket.username) { socket.emit('error', { msg: 'Inicia sesión primero' }); return; }
+    const valid = ['🧙','🧙‍♀️','🧝','🧝‍♀️','👸','🤴','🧚','🐱','👹','🧟','🐲','🦉'];
+    const av = valid.includes(avatar) ? avatar : '🧙';
+    db.prepare('UPDATE profiles SET avatar=? WHERE username=?').run(av, socket.username);
+    const row = stmts.findUser.get(socket.username);
+    socket.emit('avatar_updated', publicProfile(rowToProfile(row)));
   });
 
   // ─── LOBBY ────────────────────────────────────────────────────────────────
@@ -295,6 +309,7 @@ io.on('connection', socket => {
       yourLevel: calcLevel(p0.xp).n,
       oppLevel: calcLevel(p1.xp).n,
       oppName: socket.username,
+      oppAvatar: p1 ? (p1.avatar||'🧙‍♀️') : '🧙‍♀️',
       state: room.state,
     });
     room.sockets[1].emit('duel_start', {
@@ -302,6 +317,7 @@ io.on('connection', socket => {
       yourLevel: calcLevel(p1.xp).n,
       oppLevel: calcLevel(p0.xp).n,
       oppName: room.state.players[0].username,
+      oppAvatar: p0 ? (p0.avatar||'🧙') : '🧙',
       state: room.state,
     });
   });
@@ -515,11 +531,13 @@ function checkWin(code, room) {
 function publicProfile(p) {
   const level = calcLevel(p.xp);
   const next = xpToNextLevel(p.xp);
+  const avatar = p.avatar || '🧙';
   const avgReaction = p.stats.reactionSamples > 0
     ? Math.round(p.stats.totalReactionMs / p.stats.reactionSamples)
     : null;
   return {
     username: p.username,
+    avatar,
     xp: p.xp,
     level: level.n,
     levelName: level.name,
