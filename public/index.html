@@ -2,201 +2,368 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0d0a1a">
 <title>⚡ Wizard Duel</title>
 <script src="/socket.io/socket.io.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap');
-*{box-sizing:border-box;margin:0;padding:0}
-html,body{min-height:100vh;background:#0d0a1a;font-family:'Crimson Text',serif;color:#fff}
 
-/* ── SHARED ── */
-.screen{max-width:480px;margin:0 auto;padding:24px 18px;min-height:100vh}
-.title{font-family:'Cinzel',serif;color:#e8c87a;font-size:24px;font-weight:700;letter-spacing:4px;text-align:center;text-shadow:0 0 20px rgba(232,200,122,.5);margin-bottom:4px}
-.sub{color:rgba(200,180,255,.6);font-size:12px;text-align:center;font-style:italic;margin-bottom:24px}
-.sec{font-family:'Cinzel',serif;color:rgba(200,180,255,.65);font-size:10px;letter-spacing:2px;text-align:center;margin-bottom:8px}
-.btn{width:100%;padding:13px;border-radius:10px;font-family:'Cinzel',serif;font-size:12px;font-weight:700;letter-spacing:2px;cursor:pointer;transition:all .2s;-webkit-tap-highlight-color:transparent;margin-bottom:8px}
-.btn-gold{border:2px solid #e8c87a;background:rgba(232,200,122,.16);color:#e8c87a}
-.btn-gold:active{background:rgba(232,200,122,.3)}
-.btn-gold:disabled{opacity:.3;cursor:not-allowed}
+/* ── RESET & BASE ── */
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html{font-size:16px;height:100%}
+body{
+  min-height:100%;min-height:100dvh;
+  background:#0d0a1a;
+  font-family:'Crimson Text',serif;
+  color:#fff;
+  overflow-x:hidden;
+  /* prevent pull-to-refresh on mobile */
+  overscroll-behavior-y:contain;
+}
+
+/* ── TYPOGRAPHY SCALE — mobile first ── */
+:root{
+  --f-xs:11px; --f-sm:13px; --f-md:15px; --f-lg:18px; --f-xl:22px; --f-2xl:28px;
+  --gold:#e8c87a; --purple:rgba(200,180,255,1); --green:#4ade80; --red:#f87171;
+  --r:10px; --gap:10px;
+  --safe-b: env(safe-area-inset-bottom, 0px);
+}
+
+/* ── SHARED LAYOUT ── */
+.page{
+  width:100%; max-width:430px; margin:0 auto;
+  padding:16px 14px calc(16px + var(--safe-b));
+  min-height:100dvh; display:flex; flex-direction:column;
+}
+
+/* ── SHARED COMPONENTS ── */
+.title{font-family:'Cinzel',serif;color:var(--gold);font-size:var(--f-2xl);font-weight:700;letter-spacing:3px;text-align:center;text-shadow:0 0 18px rgba(232,200,122,.4);margin-bottom:3px}
+.subtitle{color:rgba(200,180,255,.6);font-size:var(--f-sm);text-align:center;font-style:italic;margin-bottom:20px}
+.section-lbl{font-family:'Cinzel',serif;color:rgba(200,180,255,.6);font-size:10px;letter-spacing:2px;text-align:center;margin-bottom:8px}
+
+/* Inputs */
+input.field{
+  display:block;width:100%;padding:14px 16px;
+  border-radius:var(--r);border:1.5px solid rgba(200,180,255,.25);
+  background:rgba(255,255,255,.07);color:#fff;
+  font-family:'Crimson Text',serif;font-size:var(--f-md);
+  outline:none;margin-bottom:10px;
+  /* larger touch target */
+  min-height:50px;
+}
+input.field:focus{border-color:#60a5fa}
+input.field::placeholder{color:rgba(200,180,255,.35)}
+
+/* Buttons */
+.btn{
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  width:100%;min-height:52px;padding:14px;
+  border-radius:var(--r);
+  font-family:'Cinzel',serif;font-size:var(--f-sm);font-weight:700;letter-spacing:2px;
+  cursor:pointer;transition:all .15s;margin-bottom:10px;
+  border:none;
+}
+.btn:active{transform:scale(.97)}
+.btn-gold{border:2px solid var(--gold);background:rgba(232,200,122,.15);color:var(--gold)}
+.btn-gold:active{background:rgba(232,200,122,.28)}
+.btn-gold:disabled{opacity:.3;pointer-events:none}
 .btn-blue{border:1.5px solid #60a5fa;background:rgba(96,165,250,.14);color:#60a5fa}
-.btn-muted{border:1.5px solid rgba(200,180,255,.2);background:rgba(200,180,255,.05);color:rgba(200,180,255,.5)}
-.inp{width:100%;padding:12px 14px;border-radius:9px;border:1.5px solid rgba(200,180,255,.25);background:rgba(255,255,255,.06);color:#fff;font-family:'Crimson Text',serif;font-size:15px;outline:none;margin-bottom:8px}
-.inp:focus{border-color:#60a5fa}
-.msg{text-align:center;font-size:12px;font-style:italic;min-height:18px;margin:4px 0 8px}
-.msg.ok{color:#4ade80} .msg.err{color:#f87171} .msg.wait{color:rgba(200,180,255,.6);animation:blink .8s infinite}
+.btn-ghost{border:1px solid rgba(200,180,255,.18);background:rgba(200,180,255,.05);color:rgba(200,180,255,.5)}
+
+.msg{text-align:center;font-size:var(--f-sm);font-style:italic;min-height:20px;margin:4px 0 8px}
+.msg.ok{color:var(--green)} .msg.err{color:var(--red)} .msg.wait{color:rgba(200,180,255,.6);animation:blink .8s infinite}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
 
 /* ── AUTH SCREEN ── */
-.auth-tabs{display:flex;gap:6px;margin-bottom:20px}
-.auth-tab{flex:1;padding:10px;border-radius:8px;font-family:'Cinzel',serif;font-size:11px;font-weight:700;letter-spacing:1px;cursor:pointer;text-align:center;border:1px solid rgba(200,180,255,.2);background:rgba(255,255,255,.04);color:rgba(200,180,255,.5);transition:all .2s}
-.auth-tab.active{border-color:#e8c87a;background:rgba(232,200,122,.12);color:#e8c87a}
+.auth-tabs{display:flex;gap:6px;margin-bottom:18px}
+.auth-tab{
+  flex:1;padding:13px 8px;
+  border-radius:var(--r);
+  font-family:'Cinzel',serif;font-size:var(--f-sm);font-weight:700;letter-spacing:1px;
+  cursor:pointer;text-align:center;
+  border:1.5px solid rgba(200,180,255,.2);
+  background:rgba(255,255,255,.04);color:rgba(200,180,255,.5);
+  transition:all .2s;min-height:48px;
+}
+.auth-tab.on{border-color:var(--gold);background:rgba(232,200,122,.12);color:var(--gold)}
 
 /* ── PROFILE CARD ── */
-.profile-card{background:rgba(255,255,255,.04);border:1px solid rgba(200,180,255,.15);border-radius:14px;padding:14px 16px;margin-bottom:18px}
-.pc-top{display:flex;align-items:center;gap:12px;margin-bottom:10px}
-.pc-avatar{width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;border:2px solid}
-.pc-info{flex:1}
-.pc-name{font-family:'Cinzel',serif;color:#e8c87a;font-size:14px;font-weight:700}
-.pc-level{font-size:11px;font-style:italic;margin-top:1px}
-.pc-streak{font-size:11px;color:#facc15;font-family:'Cinzel',serif}
-.xp-bar-outer{height:7px;background:rgba(255,255,255,.1);border-radius:4px;overflow:hidden;margin-bottom:4px;border:.5px solid rgba(255,255,255,.1)}
-.xp-bar-inner{height:100%;border-radius:4px;transition:width .8s ease;background:linear-gradient(90deg,#7c3aed,#a855f7)}
-.xp-label{display:flex;justify-content:space-between;font-size:10px;color:rgba(200,180,255,.6);font-family:'Cinzel',serif}
+.pcard{background:rgba(255,255,255,.04);border:1px solid rgba(200,180,255,.15);border-radius:14px;padding:14px;margin-bottom:16px}
+.pcard-top{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+.avatar{width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px;border:2px solid;flex-shrink:0}
+.pcard-info{flex:1;min-width:0}
+.pcard-name{font-family:'Cinzel',serif;color:var(--gold);font-size:var(--f-md);font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pcard-lvl{font-size:var(--f-xs);font-style:italic;margin-top:2px}
+.pcard-streak{font-size:var(--f-xs);color:#facc15;font-family:'Cinzel',serif;margin-top:2px}
+.pcard-xp{text-align:right;flex-shrink:0}
+.pcard-xp-val{font-family:'Cinzel',serif;color:#a855f7;font-size:var(--f-md);font-weight:700}
+.pcard-xp-sub{font-size:9px;color:rgba(200,180,255,.5);margin-top:2px}
+.xpb-outer{height:8px;background:rgba(255,255,255,.1);border-radius:4px;overflow:hidden;margin-bottom:4px}
+.xpb-inner{height:100%;border-radius:4px;transition:width .8s ease;background:linear-gradient(90deg,#7c3aed,#a855f7)}
+.xpb-lbl{display:flex;justify-content:space-between;font-size:9px;color:rgba(200,180,255,.55);font-family:'Cinzel',serif}
 .stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:10px}
-.stat-box{background:rgba(0,0,0,.2);border-radius:8px;padding:7px 4px;text-align:center}
-.stat-val{font-family:'Cinzel',serif;font-size:14px;font-weight:700;color:#e8c87a}
-.stat-lbl{font-size:9px;color:rgba(200,180,255,.55);margin-top:1px}
+.sbox{background:rgba(0,0,0,.25);border-radius:8px;padding:8px 4px;text-align:center}
+.sbox-val{font-family:'Cinzel',serif;font-size:var(--f-lg);font-weight:700;color:var(--gold)}
+.sbox-lbl{font-size:9px;color:rgba(200,180,255,.5);margin-top:2px}
 
-/* ── LOBBY ── */
-.path-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:18px}
-.path-card{background:rgba(255,255,255,.04);border:1.5px solid rgba(200,180,255,.2);border-radius:12px;padding:11px 7px;cursor:pointer;text-align:center;transition:all .2s;-webkit-tap-highlight-color:transparent}
-.path-card.sel{border-color:#e8c87a;background:rgba(232,200,122,.12)}
-.path-card:active{background:rgba(200,180,255,.1)}
-.path-icon{font-size:26px;margin-bottom:5px}
-.path-name{font-family:'Cinzel',serif;color:#e8c87a;font-size:10px;font-weight:700;letter-spacing:1px;margin-bottom:3px}
+/* ── PATH SELECTION ── */
+.path-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px}
+.path-card{
+  background:rgba(255,255,255,.04);border:1.5px solid rgba(200,180,255,.2);
+  border-radius:12px;padding:12px 6px;cursor:pointer;text-align:center;
+  transition:all .15s;
+}
+.path-card:active{transform:scale(.97)}
+.path-card.on{border-color:var(--gold);background:rgba(232,200,122,.12)}
+.path-icon{font-size:28px;margin-bottom:5px}
+.path-name{font-family:'Cinzel',serif;color:var(--gold);font-size:10px;font-weight:700;letter-spacing:1px;margin-bottom:3px}
 .path-desc{color:rgba(200,180,255,.65);font-size:9px;line-height:1.4;font-style:italic}
-.path-bonus{margin-top:5px;font-size:9px;color:#4ade80;font-family:'Cinzel',serif}
-.code-box{text-align:center;padding:14px;background:rgba(232,200,122,.08);border:1.5px solid rgba(232,200,122,.3);border-radius:12px;margin-bottom:12px}
-.code-lbl{font-family:'Cinzel',serif;color:rgba(200,180,255,.6);font-size:10px;letter-spacing:2px;margin-bottom:5px}
-.code-big{font-family:'Cinzel',serif;color:#e8c87a;font-size:38px;font-weight:700;letter-spacing:8px;text-shadow:0 0 20px rgba(232,200,122,.5)}
-.join-row{display:flex;gap:8px;margin-bottom:8px}
-.code-inp{flex:1;padding:12px 14px;border-radius:9px;border:1.5px solid rgba(200,180,255,.25);background:rgba(255,255,255,.06);color:#fff;font-family:'Cinzel',serif;font-size:18px;font-weight:700;letter-spacing:4px;text-transform:uppercase;text-align:center;outline:none}
-.code-inp:focus{border-color:#60a5fa}
+.path-bonus{margin-top:5px;font-size:9px;color:var(--green);font-family:'Cinzel',serif}
 
-/* ── GAME ── */
-#game{display:none;max-width:480px;margin:0 auto;padding-bottom:16px}
-.g-hdr{text-align:center;padding:10px 16px 5px}
-.g-title{font-family:'Cinzel',serif;color:#e8c87a;font-size:17px;font-weight:700;letter-spacing:3px}
-.g-badge{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-family:'Cinzel',serif;letter-spacing:1px;padding:3px 10px;border-radius:20px;margin-top:3px}
-.hbars{display:flex;justify-content:space-between;align-items:center;padding:5px 14px;gap:8px}
-.wi{flex:1;max-width:200px} .wi.en{text-align:right}
-.wn{font-family:'Cinzel',serif;color:#e8c87a;font-size:10px;font-weight:700;margin-bottom:2px}
-.wlvl{font-size:9px;color:rgba(200,180,255,.55);font-style:italic}
-.hbc{height:8px;background:rgba(255,255,255,.1);border-radius:4px;overflow:hidden;border:.5px solid rgba(255,255,255,.1)}
-.hb{height:100%;border-radius:4px;transition:width .6s}
+/* Code box */
+.codebox{text-align:center;padding:16px;background:rgba(232,200,122,.07);border:1.5px solid rgba(232,200,122,.3);border-radius:12px;margin-bottom:12px}
+.codebox-lbl{font-family:'Cinzel',serif;color:rgba(200,180,255,.55);font-size:10px;letter-spacing:2px;margin-bottom:6px}
+.codebox-big{font-family:'Cinzel',serif;color:var(--gold);font-size:42px;font-weight:700;letter-spacing:8px;text-shadow:0 0 18px rgba(232,200,122,.5)}
+.codebox-sub{font-size:11px;color:rgba(200,180,255,.45);margin-top:5px;font-style:italic}
+
+.join-row{display:flex;gap:8px;margin-bottom:8px}
+input.code-inp{
+  flex:1;padding:13px 10px;
+  border-radius:var(--r);border:1.5px solid rgba(200,180,255,.25);
+  background:rgba(255,255,255,.07);color:#fff;
+  font-family:'Cinzel',serif;font-size:22px;font-weight:700;
+  letter-spacing:6px;text-transform:uppercase;text-align:center;
+  outline:none;min-height:52px;
+}
+input.code-inp:focus{border-color:#60a5fa}
+
+/* ── GAME SCREEN ── */
+#game{
+  display:none;
+  width:100%;max-width:430px;margin:0 auto;
+  /* use full viewport, fixed sections */
+  height:100dvh;
+  display:none;
+  flex-direction:column;
+  overflow:hidden;
+}
+
+/* Header strip */
+.g-hdr{
+  padding:10px 14px 6px;
+  display:flex;align-items:center;justify-content:space-between;
+  flex-shrink:0;
+}
+.g-title{font-family:'Cinzel',serif;color:var(--gold);font-size:var(--f-lg);font-weight:700;letter-spacing:2px}
+.g-badge{font-size:10px;font-family:'Cinzel',serif;letter-spacing:1px;padding:4px 10px;border-radius:20px}
+
+/* HP bars */
+.hbars{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:4px 14px;gap:8px;flex-shrink:0;
+}
+.wi{flex:1;min-width:0} .wi.en{text-align:right}
+.wn{font-family:'Cinzel',serif;color:var(--gold);font-size:11px;font-weight:700;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wlvl{font-size:9px;color:rgba(200,180,255,.5);font-style:italic;margin-bottom:3px}
+.hbc{height:9px;background:rgba(255,255,255,.1);border-radius:5px;overflow:hidden;border:.5px solid rgba(255,255,255,.1)}
+.hb{height:100%;border-radius:5px;transition:width .6s}
 .hb.p{background:#22c55e} .hb.e{background:#ef4444}
-.ht{font-size:10px;color:rgba(200,180,255,.8);margin-top:2px;font-family:'Cinzel',serif}
+.ht{font-size:10px;color:rgba(200,180,255,.75);margin-top:2px;font-family:'Cinzel',serif}
 .en .ht{text-align:right}
-.vs{font-family:'Cinzel',serif;color:#e8c87a;font-size:15px;font-weight:700}
-.arena{display:flex;justify-content:space-between;align-items:flex-end;padding:4px 26px 0;height:95px;position:relative}
-.wsp{font-size:44px;user-select:none;transition:transform .3s}
-.wsp.casting{animation:cA .5s ease} .wsp.hit{animation:hA .4s ease}
+.vs{font-family:'Cinzel',serif;color:var(--gold);font-size:16px;font-weight:700;flex-shrink:0}
+
+/* Arena */
+.arena{
+  display:flex;justify-content:space-between;align-items:flex-end;
+  padding:0 28px;height:80px;position:relative;flex-shrink:0;
+}
+.wsp{font-size:48px;user-select:none;transition:transform .3s}
+.wsp.casting{animation:cA .5s ease}
+.wsp.hit{animation:hA .4s ease}
 @keyframes cA{0%{transform:scale(1)}30%{transform:scale(1.2) translateX(8px)}100%{transform:scale(1)}}
-@keyframes hA{0%{transform:translateX(0)}25%{transform:translateX(-12px) rotate(-5deg)}100%{transform:translateX(0)}}
-.sfx{position:absolute;top:50%;left:50%;font-size:28px;opacity:0;pointer-events:none;animation:sfxfly .8s ease forwards}
+@keyframes hA{0%{transform:translateX(0)}25%{transform:translateX(-14px) rotate(-6deg)}100%{transform:translateX(0)}}
+.sfx{position:absolute;top:50%;left:50%;font-size:30px;opacity:0;pointer-events:none;animation:sfxfly .8s ease forwards}
 @keyframes sfxfly{0%{opacity:1;transform:translate(-80%,-50%) scale(.5)}50%{opacity:1;transform:translate(-50%,-50%) scale(1.3)}100%{opacity:0;transform:translate(-20%,-50%) scale(.8)}}
-.cpanel{margin:5px 14px;border-radius:12px;transition:all .3s;padding:9px 13px}
+
+/* Counter panel */
+.cpanel{
+  margin:5px 12px;border-radius:12px;transition:background .3s,border .3s;
+  padding:10px 12px;flex-shrink:0;
+}
 .cpanel.idle{background:rgba(255,255,255,.03);border:1px dashed rgba(200,180,255,.13);text-align:center}
-.cpanel.active{background:rgba(180,50,50,.15);border:2px solid rgba(255,80,80,.6);animation:pp .5s ease}
+.cpanel.active{background:rgba(180,50,50,.15);border:2px solid rgba(255,80,80,.6);animation:pp .4s ease}
 .cpanel.success{background:rgba(50,180,100,.15);border:2px solid rgba(80,255,140,.6)}
 .cpanel.fail{background:rgba(100,50,50,.2);border:1px solid rgba(200,80,80,.3)}
 .cpanel.waiting{background:rgba(255,160,50,.08);border:1px solid rgba(255,160,50,.3);text-align:center}
-@keyframes pp{0%{transform:scale(.98)}50%{transform:scale(1.02)}100%{transform:scale(1)}}
+@keyframes pp{0%{transform:scale(.98)}60%{transform:scale(1.02)}100%{transform:scale(1)}}
 .cp-lbl{font-family:'Cinzel',serif;font-size:10px;letter-spacing:2px;margin-bottom:5px}
-.cp-lbl.idle{color:rgba(200,180,255,.35)} .cp-lbl.active{color:#f87171;animation:blink .6s infinite}
-.cp-lbl.success{color:#4ade80} .cp-lbl.fail{color:rgba(200,100,100,.7)} .cp-lbl.waiting{color:rgba(255,160,50,.8)}
-.cp-phrase{font-family:'Cinzel',serif;font-size:19px;font-weight:700;color:#fff;text-align:center;margin-bottom:7px;text-shadow:0 0 15px rgba(255,200,50,.7);letter-spacing:1px}
-.cp-bar-outer{height:6px;background:rgba(255,255,255,.1);border-radius:3px;overflow:hidden;margin-bottom:7px}
+.cp-lbl.idle{color:rgba(200,180,255,.3)}
+.cp-lbl.active{color:var(--red);animation:blink .6s infinite}
+.cp-lbl.success{color:var(--green)} .cp-lbl.fail{color:rgba(200,100,100,.7)} .cp-lbl.waiting{color:rgba(255,160,50,.8)}
+.cp-phrase{
+  font-family:'Cinzel',serif;font-size:clamp(16px,4vw,22px);font-weight:700;
+  color:#fff;text-align:center;margin-bottom:8px;
+  text-shadow:0 0 14px rgba(255,200,50,.7);letter-spacing:1px;
+  line-height:1.3;
+}
+.cp-bar-outer{height:6px;background:rgba(255,255,255,.1);border-radius:3px;overflow:hidden;margin-bottom:8px}
 .cp-bar{height:100%;border-radius:3px;transition:width .1s linear}
-.cp-mic{width:100%;padding:9px;border-radius:8px;font-family:'Cinzel',serif;font-size:11px;font-weight:700;letter-spacing:1px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;border:1.5px solid rgba(255,80,80,.5);background:rgba(255,80,80,.1);color:#f87171;-webkit-tap-highlight-color:transparent}
-.cp-mic.on{background:rgba(255,80,80,.25);border-color:#f87171;animation:mpulse 1s infinite}
-@keyframes mpulse{0%,100%{box-shadow:0 0 0 0 rgba(255,80,80,.3)}50%{box-shadow:0 0 0 6px rgba(255,80,80,0)}}
-.cp-row{display:flex;justify-content:space-between;align-items:center;margin-top:3px}
-.cp-timer{font-size:14px;font-weight:700;font-family:'Cinzel',serif;color:#f87171}
-.sb{padding:5px 12px 3px}
-.sbt{font-family:'Cinzel',serif;color:rgba(200,180,255,.6);font-size:10px;letter-spacing:2px;text-align:center;margin-bottom:5px}
-.sgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}
-.sc{background:rgba(255,255,255,.05);border:.5px solid rgba(200,180,255,.2);border-radius:9px;padding:7px 5px;cursor:pointer;transition:all .2s;text-align:center;position:relative;-webkit-tap-highlight-color:transparent}
-.sc:active,.sc.act{background:rgba(232,200,122,.15);border-color:#e8c87a}
+.cp-row{display:flex;align-items:center;gap:8px}
+.cp-mic-btn{
+  flex:1;min-height:48px;padding:10px;
+  border-radius:9px;
+  font-family:'Cinzel',serif;font-size:var(--f-sm);font-weight:700;letter-spacing:1px;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;
+  border:1.5px solid rgba(255,80,80,.5);background:rgba(255,80,80,.1);color:var(--red);
+}
+.cp-mic-btn.on{background:rgba(255,80,80,.25);border-color:var(--red);animation:mpulse 1s infinite}
+.cp-timer{font-size:18px;font-weight:700;font-family:'Cinzel',serif;color:var(--red);min-width:38px;text-align:right;flex-shrink:0}
+@keyframes mpulse{0%,100%{box-shadow:0 0 0 0 rgba(255,80,80,.3)}50%{box-shadow:0 0 0 8px rgba(255,80,80,0)}}
+
+/* Spellbook */
+.sb{padding:4px 12px 2px;flex-shrink:0}
+.sbt{font-family:'Cinzel',serif;color:rgba(200,180,255,.55);font-size:10px;letter-spacing:2px;text-align:center;margin-bottom:5px}
+.sgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.sc{
+  background:rgba(255,255,255,.05);border:.5px solid rgba(200,180,255,.2);
+  border-radius:10px;padding:10px 4px;cursor:pointer;
+  transition:all .15s;text-align:center;position:relative;
+  /* large touch target */
+  min-height:70px;display:flex;flex-direction:column;align-items:center;justify-content:center;
+}
+.sc:active,.sc.act{background:rgba(232,200,122,.15);border-color:var(--gold);transform:scale(.95)}
 .sc.disabled{opacity:.3;pointer-events:none}
 .sc.secret{border-color:rgba(255,100,200,.4);background:rgba(255,100,200,.06)}
-.si{font-size:17px;margin-bottom:2px} .sn{font-family:'Cinzel',serif;color:#e8c87a;font-size:9px;font-weight:700}
-.sdmg{font-size:9px;color:#f87171;font-family:'Cinzel',serif;margin-top:1px}
-.sheal{font-size:9px;color:#4ade80;font-family:'Cinzel',serif;margin-top:1px}
-.sbadge{position:absolute;top:-3px;right:-3px;background:#ff64c8;border-radius:5px;font-size:7px;color:#fff;padding:1px 3px;font-family:'Cinzel',serif;font-weight:700}
-.ctrl{padding:5px 12px}
-.mbn{width:100%;padding:10px;background:rgba(200,180,255,.08);border:1.5px solid rgba(200,180,255,.3);border-radius:9px;color:rgba(200,180,255,.9);font-family:'Cinzel',serif;font-size:11px;font-weight:700;letter-spacing:2px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px;-webkit-tap-highlight-color:transparent}
-.mbn.on{background:rgba(255,80,80,.15);border-color:rgba(255,80,80,.7);color:#f87171;animation:mpulse 1s infinite}
-.mbn.disabled{opacity:.35;pointer-events:none}
-.tx{text-align:center;color:rgba(200,180,255,.45);font-size:10px;font-style:italic;min-height:14px;padding:2px 14px 0}
-.blog{margin:4px 12px 5px;background:rgba(0,0,0,.3);border:.5px solid rgba(200,180,255,.12);border-radius:9px;padding:6px 11px;min-height:40px}
-.le{color:rgba(220,210,255,.85);font-size:11px;line-height:1.5;font-style:italic}
-.le.sc2{color:#e8c87a;font-style:normal;font-weight:600} .le.dm{color:#f87171}
-.le.hl{color:#4ade80} .le.ms{color:rgba(200,180,255,.4)} .le.ct{color:#60a5fa;font-weight:700;font-size:12px}
-.tind{text-align:center;font-family:'Cinzel',serif;font-size:9px;color:rgba(200,180,255,.5);letter-spacing:2px;padding:0 14px 4px}
-.tind.mine{color:#e8c87a;font-size:10px}
+.si{font-size:22px;margin-bottom:3px}
+.sn{font-family:'Cinzel',serif;color:var(--gold);font-size:9px;font-weight:700;line-height:1.2}
+.sdmg{font-size:9px;color:var(--red);font-family:'Cinzel',serif;margin-top:2px}
+.sheal{font-size:9px;color:var(--green);font-family:'Cinzel',serif;margin-top:2px}
+.sbadge{position:absolute;top:-4px;right:-4px;background:#ff64c8;border-radius:5px;font-size:7px;color:#fff;padding:1px 3px;font-family:'Cinzel',serif;font-weight:700}
 
-/* ── XP RESULT OVERLAY ── */
-.xp-overlay{position:fixed;inset:0;background:rgba(0,0,0,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:200;padding:24px;text-align:center}
-.xp-title{font-family:'Cinzel',serif;font-size:26px;font-weight:700;letter-spacing:4px;margin-bottom:8px}
-.xp-title.win{color:#e8c87a;text-shadow:0 0 30px rgba(232,200,122,.8)}
-.xp-title.loss{color:#f87171}
-.xp-gained{font-size:32px;font-weight:700;font-family:'Cinzel',serif;color:#a855f7;margin:12px 0 4px}
-.xp-gained.neg{color:#f87171}
-.xp-breakdown{margin:8px 0 14px;text-align:left;background:rgba(255,255,255,.04);border-radius:10px;padding:10px 14px;width:100%;max-width:320px}
-.xp-row{display:flex;justify-content:space-between;font-size:12px;color:rgba(200,180,255,.75);margin-bottom:3px}
-.xp-row span:last-child{font-family:'Cinzel',serif;font-weight:700}
-.xp-row span.pos{color:#4ade80} .xp-row span.neg2{color:#f87171}
-.lvlup-banner{background:rgba(168,85,247,.2);border:2px solid #a855f7;border-radius:10px;padding:10px 20px;margin-bottom:14px;font-family:'Cinzel',serif;color:#a855f7;font-size:13px;font-weight:700;letter-spacing:2px;animation:lvlPulse 1s ease infinite}
-@keyframes lvlPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.03)}}
-.new-xp-bar{margin:12px 0 6px;width:100%;max-width:320px}
-.new-lvl-label{font-family:'Cinzel',serif;color:rgba(200,180,255,.6);font-size:11px;letter-spacing:1px;margin-bottom:6px}
-.new-profile-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;width:100%;max-width:320px;margin-bottom:16px}
+/* Mic attack button */
+.ctrl{padding:5px 12px 4px;flex-shrink:0}
+.mbn{
+  width:100%;min-height:52px;padding:12px;
+  background:rgba(200,180,255,.08);border:1.5px solid rgba(200,180,255,.3);
+  border-radius:var(--r);color:rgba(200,180,255,.9);
+  font-family:'Cinzel',serif;font-size:var(--f-sm);font-weight:700;letter-spacing:2px;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;
+  transition:all .15s;
+}
+.mbn.on{background:rgba(255,80,80,.15);border-color:rgba(255,80,80,.7);color:var(--red);animation:mpulse 1s infinite}
+.mbn.disabled{opacity:.3;pointer-events:none}
+
+/* Transcript + log */
+.tx{text-align:center;color:rgba(200,180,255,.4);font-size:11px;font-style:italic;min-height:14px;padding:2px 14px 0;flex-shrink:0}
+.blog{
+  margin:4px 12px 0;
+  background:rgba(0,0,0,.3);border:.5px solid rgba(200,180,255,.12);border-radius:9px;
+  padding:7px 11px;flex-shrink:0;
+}
+.le{color:rgba(220,210,255,.85);font-size:12px;line-height:1.5;font-style:italic}
+.le.sc2{color:var(--gold);font-style:normal;font-weight:600}
+.le.dm{color:var(--red)} .le.hl{color:var(--green)}
+.le.ms{color:rgba(200,180,255,.4)} .le.ct{color:#60a5fa;font-weight:700}
+
+/* Turn indicator */
+.tind{
+  text-align:center;font-family:'Cinzel',serif;font-size:10px;
+  color:rgba(200,180,255,.45);letter-spacing:2px;
+  padding:4px 14px calc(4px + var(--safe-b));flex-shrink:0;
+}
+.tind.mine{color:var(--gold);font-size:11px}
+
+/* ── XP RESULT ── */
+.xp-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.93);
+  display:flex;flex-direction:column;align-items:center;
+  justify-content:flex-start;z-index:200;
+  padding:24px 18px calc(24px + var(--safe-b));
+  overflow-y:auto;text-align:center;
+}
+.xp-title{font-family:'Cinzel',serif;font-size:var(--f-2xl);font-weight:700;letter-spacing:3px;margin-bottom:6px}
+.xp-title.win{color:var(--gold);text-shadow:0 0 24px rgba(232,200,122,.7)}
+.xp-title.loss{color:var(--red)}
+.xp-gained{font-size:36px;font-weight:700;font-family:'Cinzel',serif;color:#a855f7;margin:10px 0 4px}
+.xp-gained.neg{color:var(--red)}
+.xp-breakdown{
+  margin:8px 0 12px;text-align:left;
+  background:rgba(255,255,255,.04);border-radius:10px;
+  padding:10px 14px;width:100%;
+}
+.xp-row{display:flex;justify-content:space-between;font-size:13px;color:rgba(200,180,255,.75);margin-bottom:4px}
+.xp-row .pos{color:var(--green)} .xp-row .neg2{color:var(--red)}
+.lvlup-banner{
+  background:rgba(168,85,247,.2);border:2px solid #a855f7;border-radius:10px;
+  padding:11px 20px;margin-bottom:12px;
+  font-family:'Cinzel',serif;color:#a855f7;font-size:14px;font-weight:700;letter-spacing:2px;
+  animation:lvlpulse 1s ease infinite;width:100%;
+}
+@keyframes lvlpulse{0%,100%{transform:scale(1)}50%{transform:scale(1.02)}}
+.new-xp-bar{margin:10px 0 6px;width:100%}
+.new-lvl-lbl{font-family:'Cinzel',serif;font-size:11px;letter-spacing:1px;margin-bottom:6px}
+.result-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;width:100%;margin-bottom:16px}
 </style>
 </head>
 <body>
 
 <!-- ── AUTH ── -->
-<div class="screen" id="auth-screen">
-  <div class="title">⚡ WIZARD DUEL</div>
-  <div class="sub">Duelo mágico multijugador</div>
+<div class="page" id="auth-screen">
+  <div style="margin-bottom:6px;padding-top:12px">
+    <div class="title">⚡ WIZARD DUEL</div>
+    <div class="subtitle">Duelo mágico multijugador</div>
+  </div>
   <div class="auth-tabs">
-    <div class="auth-tab active" onclick="showTab('login')">INICIAR SESIÓN</div>
+    <div class="auth-tab on" onclick="showTab('login')">INICIAR SESIÓN</div>
     <div class="auth-tab" onclick="showTab('register')">CREAR CUENTA</div>
   </div>
   <div id="auth-login">
-    <input class="inp" id="l-user" placeholder="Nombre de mago" autocomplete="username">
-    <input class="inp" id="l-pass" type="password" placeholder="Contraseña" autocomplete="current-password">
+    <input class="field" id="l-user" placeholder="Nombre de mago" autocomplete="username" autocapitalize="none">
+    <input class="field" id="l-pass" type="password" placeholder="Contraseña" autocomplete="current-password">
     <button class="btn btn-gold" onclick="doLogin()">⚡ ENTRAR AL CASTILLO</button>
   </div>
   <div id="auth-register" style="display:none">
-    <input class="inp" id="r-user" placeholder="Elige tu nombre de mago" autocomplete="username">
-    <input class="inp" id="r-pass" type="password" placeholder="Contraseña" autocomplete="new-password">
+    <input class="field" id="r-user" placeholder="Elige tu nombre de mago" autocomplete="username" autocapitalize="none">
+    <input class="field" id="r-pass" type="password" placeholder="Contraseña (mín. 3 caracteres)" autocomplete="new-password">
     <button class="btn btn-gold" onclick="doRegister()">🪄 CREAR MAGO</button>
   </div>
   <div class="msg" id="auth-msg"></div>
 </div>
 
 <!-- ── LOBBY ── -->
-<div class="screen" id="lobby-screen" style="display:none">
-  <div class="profile-card" id="profile-card"></div>
+<div class="page" id="lobby-screen" style="display:none">
+  <div id="profile-card" class="pcard"></div>
 
-  <div class="sec">— TU CAMINO MÁGICO —</div>
+  <div class="section-lbl">— TU CAMINO MÁGICO —</div>
   <div class="path-grid" id="path-grid"></div>
 
-  <div id="code-display" style="display:none" class="code-box">
-    <div class="code-lbl">COMPARTE ESTE CÓDIGO</div>
-    <div class="code-big" id="code-big">----</div>
-    <div style="font-size:11px;color:rgba(200,180,255,.5);margin-top:5px;font-style:italic">Esperando al rival...</div>
+  <div id="code-display" style="display:none" class="codebox">
+    <div class="codebox-lbl">COMPARTE ESTE CÓDIGO</div>
+    <div class="codebox-big" id="code-big">----</div>
+    <div class="codebox-sub">Esperando al rival...</div>
   </div>
+
   <div id="room-btns">
-    <button class="btn btn-gold" id="create-btn" onclick="createRoom()">⚡ CREAR SALA</button>
+    <button class="btn btn-gold" onclick="createRoom()">⚡ CREAR SALA</button>
     <div class="join-row">
-      <input class="code-inp" id="join-code" maxlength="4" placeholder="CÓDIGO" oninput="this.value=this.value.toUpperCase()">
-      <button class="btn btn-blue" onclick="joinRoom()" style="flex:0 0 auto;padding:12px 16px;font-size:11px;margin-bottom:0">UNIRSE</button>
+      <input class="code-inp" id="join-code" maxlength="4" placeholder="CÓDIGO" oninput="this.value=this.value.toUpperCase()" autocomplete="off">
+      <button class="btn btn-blue" onclick="joinRoom()" style="flex:0 0 auto;width:auto;padding:0 20px;margin-bottom:0">UNIRSE</button>
     </div>
   </div>
   <div class="msg" id="lobby-msg"></div>
-  <button class="btn btn-muted" onclick="logout()" style="margin-top:12px;font-size:10px">Cerrar sesión</button>
+  <button class="btn btn-ghost" onclick="logout()" style="margin-top:auto;font-size:11px;min-height:44px">Cerrar sesión</button>
 </div>
 
 <!-- ── GAME ── -->
 <div id="game">
   <div class="g-hdr">
-    <div class="g-title">⚡ DUELO MÁGICO</div>
+    <div class="g-title">⚡ DUELO</div>
     <div class="g-badge" id="g-badge"></div>
   </div>
+
   <div class="hbars">
     <div class="wi">
       <div class="wn" id="p-name">🧙 TÚ</div>
@@ -212,36 +379,41 @@ html,body{min-height:100vh;background:#0d0a1a;font-family:'Crimson Text',serif;c
       <div class="ht" id="eht">100 / 100</div>
     </div>
   </div>
+
   <div class="arena" id="arena">
     <div class="wsp" id="psp">🧙</div>
     <div class="wsp" id="esp">🧙‍♀️</div>
   </div>
+
   <div class="cpanel idle" id="cpanel">
     <div class="cp-lbl idle">CONTRAATAQUE EN ESPERA</div>
-    <div style="font-size:11px;color:rgba(200,180,255,.38);font-style:italic">Cuando el rival ataque, aparece aquí</div>
+    <div style="font-size:11px;color:rgba(200,180,255,.35);font-style:italic;margin-top:2px">Cuando el rival ataque, aparece aquí</div>
   </div>
+
   <div class="sb">
     <div class="sbt">— GRIMORIO —</div>
     <div class="sgrid" id="sgrid"></div>
   </div>
+
   <div class="ctrl">
     <button class="mbn" id="mbn" onclick="toggleAtk()">
-      <span>🎤</span><span id="mbntxt">PULSA PARA LANZAR HECHIZO</span>
+      <span style="font-size:18px">🎤</span>
+      <span id="mbntxt">PULSA PARA LANZAR HECHIZO</span>
     </button>
   </div>
+
   <div class="tx" id="tx"></div>
   <div class="blog" id="blog"><div class="le">Conectando al duelo...</div></div>
   <div class="tind" id="tind">—</div>
 </div>
 
 <script>
-// ── STATIC DATA ──────────────────────────────────────────────────────────────
-const PATHS = {
+const PATHS={
   destructor:{name:'Destructor',icon:'💥',color:'#f87171',desc:'Daño puro.',bonus:'+30% daño',spells:['stupefy','avada','expelliarmus','crucio']},
   guardian:  {name:'Guardián',  icon:'🛡️',color:'#60a5fa',desc:'Defensa total.',bonus:'Curación +60%',spells:['protego','lumos','expelliarmus','aguamenti']},
   trickster: {name:'Trickster', icon:'🎭',color:'#c084fc',desc:'Caos y engaño.',bonus:'Hechizos ocultos',spells:['confundo','expelliarmus','stupefy','sectum']},
 };
-const SPELLS = {
+const SPELLS={
   stupefy:      {name:'Stupefy',    icon:'⚡',dmg:25,heal:0,  kw:['stupefy','stupe']},
   expelliarmus: {name:'Expelliar.', icon:'💥',dmg:20,heal:0,  kw:['expelliarmus','expeli']},
   lumos:        {name:'Lumos',      icon:'🌟',dmg:0, heal:20, kw:['lumos']},
@@ -252,187 +424,152 @@ const SPELLS = {
   confundo:     {name:'Confundo',   icon:'🌀',dmg:15,heal:0,stun:true,kw:['confundo']},
   sectum:       {name:'Sectum',     icon:'🗡️',dmg:40,heal:0,  kw:['sectum'],secret:true},
 };
-const LEVEL_META = [
+const LEVEL_META=[
   {n:1,name:'Novato',   color:'#4ade80',icon:'🌱'},
   {n:2,name:'Aprendiz', color:'#a3e635',icon:'🌿'},
   {n:3,name:'Iniciado', color:'#facc15',icon:'⚡'},
   {n:4,name:'Experto',  color:'#fb923c',icon:'🔥'},
   {n:5,name:'Maestro',  color:'#c084fc',icon:'💀'},
 ];
-const XP_THRESHOLDS = [0, 100, 300, 700, 1500];
+const XP_THRESHOLDS=[0,100,300,700,1500];
 
-// ── STATE ────────────────────────────────────────────────────────────────────
-let G = {
-  profile: null, selectedPath: null,
-  myIndex: null, myHP: 100, oppHP: 100,
-  myTurn: false, counterActive: false,
-  listening: false, recognition: null, atkRec: null,
-  counterInterval: null, counterStartTs: 0,
+let G={
+  profile:null,selectedPath:null,
+  myIndex:null,myHP:100,oppHP:100,
+  myTurn:false,counterActive:false,
+  listening:false,recognition:null,atkRec:null,
+  counterInterval:null,counterStartTs:0,
 };
 
-const socket = io();
+const socket=io();
 
 // ── AUTH ─────────────────────────────────────────────────────────────────────
-function showTab(t) {
-  document.querySelectorAll('.auth-tab').forEach((el,i) => el.classList.toggle('active', (i===0) === (t==='login')));
-  document.getElementById('auth-login').style.display    = t==='login'    ? 'block' : 'none';
-  document.getElementById('auth-register').style.display = t==='register' ? 'block' : 'none';
-  document.getElementById('auth-msg').textContent = '';
+function showTab(t){
+  document.querySelectorAll('.auth-tab').forEach((el,i)=>el.classList.toggle('on',(i===0)===(t==='login')));
+  document.getElementById('auth-login').style.display   =t==='login'   ?'block':'none';
+  document.getElementById('auth-register').style.display=t==='register'?'block':'none';
+  setAuthMsg('','');
 }
-
-function doLogin() {
-  const u = document.getElementById('l-user').value.trim();
-  const p = document.getElementById('l-pass').value;
-  if (!u || !p) { authMsg('Completa los campos', 'err'); return; }
-  socket.emit('login', { username: u, password: p });
-  authMsg('Verificando...', 'wait');
+function setAuthMsg(t,cls){const el=document.getElementById('auth-msg');el.textContent=t;el.className='msg '+(cls||'');}
+function doLogin(){
+  const u=document.getElementById('l-user').value.trim();
+  const p=document.getElementById('l-pass').value;
+  if(!u||!p){setAuthMsg('Completa los campos','err');return;}
+  socket.emit('login',{username:u,password:p});
+  setAuthMsg('Verificando...','wait');
 }
-
-function doRegister() {
-  const u = document.getElementById('r-user').value.trim();
-  const p = document.getElementById('r-pass').value;
-  if (!u || !p) { authMsg('Completa los campos', 'err'); return; }
-  socket.emit('register', { username: u, password: p });
-  authMsg('Creando tu mago...', 'wait');
+function doRegister(){
+  const u=document.getElementById('r-user').value.trim();
+  const p=document.getElementById('r-pass').value;
+  if(!u||!p){setAuthMsg('Completa los campos','err');return;}
+  socket.emit('register',{username:u,password:p});
+  setAuthMsg('Creando tu mago...','wait');
 }
-
-function authMsg(t, cls) {
-  const el = document.getElementById('auth-msg');
-  el.textContent = t; el.className = 'msg ' + (cls||'');
-}
-
-socket.on('auth_ok', profile => {
-  G.profile = profile;
-  document.getElementById('auth-screen').style.display = 'none';
-  document.getElementById('lobby-screen').style.display = 'flex';
+socket.on('auth_ok',profile=>{
+  G.profile=profile;
+  document.getElementById('auth-screen').style.display='none';
+  document.getElementById('lobby-screen').style.display='flex';
   renderLobby();
 });
-
-socket.on('auth_error', ({ msg }) => authMsg(msg, 'err'));
-
-function logout() {
-  G.profile = null; G.selectedPath = null;
-  document.getElementById('lobby-screen').style.display = 'none';
-  document.getElementById('auth-screen').style.display = 'flex';
-  authMsg('', '');
+socket.on('auth_error',({msg})=>setAuthMsg(msg,'err'));
+function logout(){
+  G.profile=null;G.selectedPath=null;
+  document.getElementById('lobby-screen').style.display='none';
+  document.getElementById('auth-screen').style.display='flex';
+  setAuthMsg('','');
 }
 
-// ── LOBBY ────────────────────────────────────────────────────────────────────
-function renderLobby() {
+// ── LOBBY ─────────────────────────────────────────────────────────────────────
+function renderLobby(){
   renderProfileCard(G.profile);
-  document.getElementById('path-grid').innerHTML = Object.entries(PATHS).map(([k,p]) =>
-    `<div class="path-card${G.selectedPath===k?' sel':''}" data-path="${k}" onclick="selPath('${k}')">
+  document.getElementById('path-grid').innerHTML=Object.entries(PATHS).map(([k,p])=>
+    `<div class="path-card${G.selectedPath===k?' on':''}" data-path="${k}" onclick="selPath('${k}')">
       <div class="path-icon">${p.icon}</div>
       <div class="path-name">${p.name.toUpperCase()}</div>
       <div class="path-desc">${p.desc}</div>
       <div class="path-bonus">${p.bonus}</div>
     </div>`).join('');
 }
-
-function renderProfileCard(profile) {
-  const lvlMeta = LEVEL_META.find(l => l.n === profile.level) || LEVEL_META[0];
-  const xpCurrent = XP_THRESHOLDS[profile.level - 1] || 0;
-  const xpNext = XP_THRESHOLDS[profile.level] || profile.xp;
-  const xpRange = xpNext - xpCurrent;
-  const xpProgress = Math.min(100, Math.round((profile.xp - xpCurrent) / xpRange * 100));
-  const avgRxn = profile.stats.avgReactionMs ? (profile.stats.avgReactionMs/1000).toFixed(2)+'s' : '—';
-  const winRate = profile.stats.wins + profile.stats.losses > 0
-    ? Math.round(profile.stats.wins / (profile.stats.wins + profile.stats.losses) * 100) + '%' : '—';
-
-  document.getElementById('profile-card').innerHTML = `
-    <div class="pc-top">
-      <div class="pc-avatar" style="background:${lvlMeta.color}22;border-color:${lvlMeta.color}">
-        ${lvlMeta.icon}
+function renderProfileCard(profile){
+  const lm=LEVEL_META.find(l=>l.n===profile.level)||LEVEL_META[0];
+  const xpC=XP_THRESHOLDS[profile.level-1]||0;
+  const xpN=XP_THRESHOLDS[profile.level]||profile.xp;
+  const pct=profile.next?Math.min(100,Math.round((profile.xp-xpC)/(xpN-xpC)*100)):100;
+  const avgRxn=profile.stats.avgReactionMs?(profile.stats.avgReactionMs/1000).toFixed(2)+'s':'—';
+  const wr=profile.stats.wins+profile.stats.losses>0?Math.round(profile.stats.wins/(profile.stats.wins+profile.stats.losses)*100)+'%':'—';
+  document.getElementById('profile-card').innerHTML=`
+    <div class="pcard-top">
+      <div class="avatar" style="background:${lm.color}22;border-color:${lm.color}">${lm.icon}</div>
+      <div class="pcard-info">
+        <div class="pcard-name">${profile.username}</div>
+        <div class="pcard-lvl" style="color:${lm.color}">Nv.${profile.level} — ${lm.name}</div>
+        ${profile.streak>=2?`<div class="pcard-streak">🔥 Racha: ${profile.streak}</div>`:''}
       </div>
-      <div class="pc-info">
-        <div class="pc-name">${profile.username}</div>
-        <div class="pc-level" style="color:${lvlMeta.color}">Nv.${profile.level} — ${lvlMeta.name}</div>
-        ${profile.streak >= 2 ? `<div class="pc-streak">🔥 Racha: ${profile.streak}</div>` : ''}
-      </div>
-      <div style="text-align:right">
-        <div style="font-family:'Cinzel',serif;color:#a855f7;font-size:13px;font-weight:700">${profile.xp} XP</div>
-        ${profile.next ? `<div style="font-size:9px;color:rgba(200,180,255,.5);margin-top:2px">${profile.next.needed} para ${profile.next.nextName}</div>` : '<div style="font-size:9px;color:#c084fc;margin-top:2px">NIVEL MÁXIMO</div>'}
+      <div class="pcard-xp">
+        <div class="pcard-xp-val">${profile.xp} XP</div>
+        <div class="pcard-xp-sub">${profile.next?profile.next.needed+' para '+profile.next.nextName:'NIVEL MÁX.'}</div>
       </div>
     </div>
-    <div class="xp-bar-outer">
-      <div class="xp-bar-inner" style="width:${profile.next ? xpProgress : 100}%"></div>
-    </div>
-    <div class="xp-label">
-      <span>${xpCurrent} XP</span>
-      <span>${profile.next ? xpNext + ' XP' : 'Maestro'}</span>
-    </div>
+    <div class="xpb-outer"><div class="xpb-inner" style="width:${pct}%"></div></div>
+    <div class="xpb-lbl"><span>${xpC} XP</span><span>${profile.next?xpN+' XP':'Maestro'}</span></div>
     <div class="stats-row">
-      <div class="stat-box"><div class="stat-val">${profile.stats.wins}</div><div class="stat-lbl">Victorias</div></div>
-      <div class="stat-box"><div class="stat-val">${winRate}</div><div class="stat-lbl">Win rate</div></div>
-      <div class="stat-box"><div class="stat-val">${profile.stats.countersSuccess}</div><div class="stat-lbl">Contras</div></div>
-      <div class="stat-box"><div class="stat-val">${avgRxn}</div><div class="stat-lbl">Reacción</div></div>
+      <div class="sbox"><div class="sbox-val">${profile.stats.wins}</div><div class="sbox-lbl">Victorias</div></div>
+      <div class="sbox"><div class="sbox-val">${wr}</div><div class="sbox-lbl">Win %</div></div>
+      <div class="sbox"><div class="sbox-val">${profile.stats.countersSuccess}</div><div class="sbox-lbl">Contras</div></div>
+      <div class="sbox"><div class="sbox-val">${avgRxn}</div><div class="sbox-lbl">Reacción</div></div>
     </div>`;
 }
-
-function selPath(k) {
-  document.querySelectorAll('.path-card').forEach(c => c.classList.remove('sel'));
-  document.querySelector(`[data-path="${k}"]`).classList.add('sel');
-  G.selectedPath = k;
+function selPath(k){
+  document.querySelectorAll('.path-card').forEach(c=>c.classList.remove('on'));
+  document.querySelector(`[data-path="${k}"]`).classList.add('on');
+  G.selectedPath=k;
 }
-
-function lobbyMsg(t, cls) {
-  const el = document.getElementById('lobby-msg');
-  el.textContent = t; el.className = 'msg ' + (cls||'');
+function setLobbyMsg(t,cls){const el=document.getElementById('lobby-msg');el.textContent=t;el.className='msg '+(cls||'');}
+function createRoom(){
+  if(!G.selectedPath){setLobbyMsg('Elige tu camino primero','err');return;}
+  socket.emit('create_room',{path:G.selectedPath});
 }
-
-function createRoom() {
-  if (!G.selectedPath) { lobbyMsg('Elige tu camino primero', 'err'); return; }
-  socket.emit('create_room', { path: G.selectedPath });
+function joinRoom(){
+  if(!G.selectedPath){setLobbyMsg('Elige tu camino primero','err');return;}
+  const code=document.getElementById('join-code').value.trim().toUpperCase();
+  if(code.length!==4){setLobbyMsg('Código de 4 letras','err');return;}
+  socket.emit('join_room',{code,path:G.selectedPath});
+  setLobbyMsg('Conectando...','wait');
 }
-
-function joinRoom() {
-  if (!G.selectedPath) { lobbyMsg('Elige tu camino primero', 'err'); return; }
-  const code = document.getElementById('join-code').value.trim().toUpperCase();
-  if (code.length !== 4) { lobbyMsg('Código de 4 letras', 'err'); return; }
-  socket.emit('join_room', { code, path: G.selectedPath });
-  lobbyMsg('Conectando...', 'wait');
-}
-
-socket.on('room_created', ({ code }) => {
-  document.getElementById('room-btns').style.display = 'none';
-  document.getElementById('code-display').style.display = 'block';
-  document.getElementById('code-big').textContent = code;
-  lobbyMsg('Esperando al rival...', 'wait');
+socket.on('room_created',({code})=>{
+  document.getElementById('room-btns').style.display='none';
+  document.getElementById('code-display').style.display='block';
+  document.getElementById('code-big').textContent=code;
+  setLobbyMsg('Esperando al rival...','wait');
 });
-
-socket.on('error', ({ msg }) => lobbyMsg(msg, 'err'));
+socket.on('error',({msg})=>setLobbyMsg(msg,'err'));
 
 // ── DUEL START ────────────────────────────────────────────────────────────────
-socket.on('duel_start', ({ yourIndex, yourLevel, oppLevel, oppName }) => {
-  G.myIndex = yourIndex;
-  G.myHP = 100; G.oppHP = 100;
-  G.myTurn = yourIndex === 0;
-
-  document.getElementById('lobby-screen').style.display = 'none';
-  document.getElementById('game').style.display = 'block';
-
-  const p = PATHS[G.selectedPath];
-  const badge = document.getElementById('g-badge');
-  badge.textContent = p.icon + ' ' + p.name.toUpperCase();
-  badge.style.cssText = `background:${p.color}22;color:${p.color};border:.5px solid ${p.color}55`;
-
-  const myMeta  = LEVEL_META.find(l => l.n === yourLevel) || LEVEL_META[0];
-  const oppMeta = LEVEL_META.find(l => l.n === oppLevel)  || LEVEL_META[0];
-  document.getElementById('p-name').textContent = '🧙 ' + G.profile.username.toUpperCase();
-  document.getElementById('p-lvl').textContent  = myMeta.icon + ' ' + myMeta.name + ' · ' + G.profile.counterSecs + 's contraataque';
-  document.getElementById('opp-name').textContent = '🧙‍♀️ ' + oppName.toUpperCase();
-  document.getElementById('opp-lvl').textContent  = oppMeta.icon + ' ' + oppMeta.name;
-
+socket.on('duel_start',({yourIndex,yourLevel,oppLevel,oppName})=>{
+  G.myIndex=yourIndex; G.myHP=100; G.oppHP=100; G.myTurn=yourIndex===0;
+  document.getElementById('lobby-screen').style.display='none';
+  const gameEl=document.getElementById('game');
+  gameEl.style.display='flex';
+  const p=PATHS[G.selectedPath];
+  const badge=document.getElementById('g-badge');
+  badge.textContent=p.icon+' '+p.name.toUpperCase();
+  badge.style.cssText=`background:${p.color}22;color:${p.color};border:.5px solid ${p.color}55`;
+  const myM=LEVEL_META.find(l=>l.n===yourLevel)||LEVEL_META[0];
+  const opM=LEVEL_META.find(l=>l.n===oppLevel)||LEVEL_META[0];
+  document.getElementById('p-name').textContent='🧙 '+G.profile.username.toUpperCase();
+  document.getElementById('p-lvl').textContent=myM.icon+' '+myM.name+' · '+G.profile.counterSecs+'s';
+  document.getElementById('opp-name').textContent='🧙‍♀️ '+oppName.toUpperCase();
+  document.getElementById('opp-lvl').textContent=opM.icon+' '+opM.name;
   renderSpells();
   setSpellsDisabled(!G.myTurn);
   updateTurn();
-  addLog('⚔️ ¡El duelo comienza!', '');
+  addLog('⚔️ ¡El duelo comienza!','');
 });
 
 // ── SPELLS ────────────────────────────────────────────────────────────────────
-function renderSpells() {
-  document.getElementById('sgrid').innerHTML = PATHS[G.selectedPath].spells.map(sk => {
-    const s = SPELLS[sk];
+function renderSpells(){
+  document.getElementById('sgrid').innerHTML=PATHS[G.selectedPath].spells.map(sk=>{
+    const s=SPELLS[sk];
     return `<div class="sc${s.secret?' secret':''}" data-spell="${sk}" onclick="clickSpell('${sk}')">
       ${s.secret?'<div class="sbadge">OCULTO</div>':''}
       <div class="si">${s.icon}</div><div class="sn">${s.name}</div>
@@ -443,170 +580,141 @@ function renderSpells() {
     </div>`;
   }).join('');
 }
-
-function setSpellsDisabled(d) {
-  document.querySelectorAll('.sc').forEach(c => c.classList.toggle('disabled', d));
-  document.getElementById('mbn').classList.toggle('disabled', d);
+function setSpellsDisabled(d){
+  document.querySelectorAll('.sc').forEach(c=>c.classList.toggle('disabled',d));
+  document.getElementById('mbn').classList.toggle('disabled',d);
 }
-
-function clickSpell(sk) {
-  if (!G.myTurn || G.counterActive) return;
-  socket.emit('cast_spell', { spell: sk });
+function clickSpell(sk){
+  if(!G.myTurn||G.counterActive)return;
+  socket.emit('cast_spell',{spell:sk});
   document.getElementById('psp').classList.add('casting');
-  setTimeout(() => document.getElementById('psp').classList.remove('casting'), 600);
+  setTimeout(()=>document.getElementById('psp').classList.remove('casting'),600);
   setSpellsDisabled(true);
 }
 
-// ── VOICE ATTACK ──────────────────────────────────────────────────────────────
-function toggleAtk() {
-  if (!G.myTurn || G.counterActive) return;
-  if (!isVoice()) { addLog('Voz no disponible — usa los botones', 'ms'); return; }
-  if (G.listening) { stopListen(); return; }
+// ── VOICE ─────────────────────────────────────────────────────────────────────
+function toggleAtk(){
+  if(!G.myTurn||G.counterActive)return;
+  if(!isVoice()){addLog('Voz no disponible — usa los botones','ms');return;}
+  if(G.listening){stopListen();return;}
   startListen();
 }
-
-function startListen() {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  const r = new SR(); r.lang='es-ES'; r.interimResults=true; r.maxAlternatives=5;
-  G.recognition=r; G.listening=true;
+function startListen(){
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  const r=new SR();r.lang='es-ES';r.interimResults=true;r.maxAlternatives=5;
+  G.recognition=r;G.listening=true;
   document.getElementById('mbn').classList.add('on');
-  document.getElementById('mbntxt').textContent = 'ESCUCHANDO... ¡LANZA!';
-  r.onresult = e => {
-    let best = '';
-    for (let i=0;i<e.results.length;i++) for (let j=0;j<e.results[i].length;j++) best=e.results[i][j].transcript;
-    document.getElementById('tx').textContent = '"'+best+'"';
-    if (e.results[0].isFinal) { processVoice(best.toLowerCase()); stopListen(); }
+  document.getElementById('mbntxt').textContent='ESCUCHANDO... ¡LANZA!';
+  r.onresult=e=>{
+    let best='';
+    for(let i=0;i<e.results.length;i++)for(let j=0;j<e.results[i].length;j++)best=e.results[i][j].transcript;
+    document.getElementById('tx').textContent='"'+best+'"';
+    if(e.results[0].isFinal){processVoice(best.toLowerCase());stopListen();}
   };
-  r.onerror = () => stopListen(); r.onend = () => stopListen(); r.start();
+  r.onerror=()=>stopListen();r.onend=()=>stopListen();r.start();
 }
-
-function stopListen() {
-  G.listening = false; try { G.recognition?.stop(); } catch(e){}
+function stopListen(){
+  G.listening=false;try{G.recognition?.stop();}catch(e){}
   document.getElementById('mbn').classList.remove('on');
-  document.getElementById('mbntxt').textContent = 'PULSA PARA LANZAR HECHIZO';
+  document.getElementById('mbntxt').textContent='PULSA PARA LANZAR HECHIZO';
 }
-
-function processVoice(text) {
-  for (const sk of PATHS[G.selectedPath].spells) {
-    for (const kw of SPELLS[sk].kw) { if (text.includes(kw)) { clickSpell(sk); return; } }
-  }
-  addLog('¡Hechizo no reconocido!', 'ms');
+function processVoice(text){
+  for(const sk of PATHS[G.selectedPath].spells)
+    for(const kw of SPELLS[sk].kw)if(text.includes(kw)){clickSpell(sk);return;}
+  addLog('¡Hechizo no reconocido!','ms');
 }
 
 // ── SOCKET EVENTS ─────────────────────────────────────────────────────────────
-socket.on('spell_result', ({ caster, spell, effect, dmg, heal }) => {
-  const s = SPELLS[spell]; if (!s) return;
+socket.on('spell_result',({caster,spell,effect,dmg,heal})=>{
+  const s=SPELLS[spell];if(!s)return;
   showSfx(s.icon);
-  const isMe = caster === G.myIndex;
-  if (effect === 'attack') {
+  const isMe=caster===G.myIndex;
+  if(effect==='attack'){
     document.getElementById(isMe?'esp':'psp').classList.add('hit');
     setTimeout(()=>document.getElementById(isMe?'esp':'psp').classList.remove('hit'),500);
-    addLog(isMe ? `${s.icon} ¡${s.name}! El rival puede contraatacar...` : `${s.icon} ¡${s.name}! ¡CONTRAATACA!`, isMe?'sc2':'dm');
-  } else if (effect==='shield') {
+    addLog(isMe?`${s.icon} ¡${s.name}! El rival puede contraatacar...`:`${s.icon} ¡${s.name}! ¡CONTRAATACA!`,isMe?'sc2':'dm');
+  }else if(effect==='shield'){
     addLog(isMe?'🛡️ ¡Protego! Escudo activo.':'⚔️ El rival activa Protego.','sc2');
-  } else if (effect==='heal') {
-    if (isMe) { G.myHP=Math.min(100,G.myHP+heal); addLog(`🌟 +${heal} HP`,'hl'); }
-    else       { G.oppHP=Math.min(100,G.oppHP+heal); addLog(`🌟 El rival se cura ${heal} HP`,'hl'); }
+  }else if(effect==='heal'){
+    if(isMe){G.myHP=Math.min(100,G.myHP+heal);addLog(`🌟 +${heal} HP`,'hl');}
+    else{G.oppHP=Math.min(100,G.oppHP+heal);addLog(`🌟 El rival se cura ${heal} HP`,'hl');}
     updateBars();
-  } else if (effect==='stun') {
-    if (!isMe) {
-      G.myHP=Math.max(0,G.myHP-dmg);
-      document.getElementById('psp').classList.add('hit');
-      setTimeout(()=>document.getElementById('psp').classList.remove('hit'),500);
-      addLog(`🌀 ¡${s.name}! ${dmg} daño + aturdido`,'dm');
-    } else {
-      G.oppHP=Math.max(0,G.oppHP-dmg);
-      document.getElementById('esp').classList.add('hit');
-      setTimeout(()=>document.getElementById('esp').classList.remove('hit'),500);
-      addLog(`🌀 ¡${s.name}! ${dmg} daño + rival aturdido`,'sc2');
-    }
+  }else if(effect==='stun'){
+    if(!isMe){G.myHP=Math.max(0,G.myHP-dmg);document.getElementById('psp').classList.add('hit');setTimeout(()=>document.getElementById('psp').classList.remove('hit'),500);addLog(`🌀 ¡${s.name}! ${dmg} daño + aturdido`,'dm');}
+    else{G.oppHP=Math.max(0,G.oppHP-dmg);document.getElementById('esp').classList.add('hit');setTimeout(()=>document.getElementById('esp').classList.remove('hit'),500);addLog(`🌀 ¡${s.name}! ${dmg} daño + rival aturdido`,'sc2');}
     updateBars();
   }
 });
-
-socket.on('counter_challenge', ({ phrase, secs, rawDmg }) => {
-  G.counterActive=true; G.counterStartTs=Date.now();
-  setSpellsDisabled(true);
-  showCounterChallenge(phrase, secs, rawDmg);
+socket.on('counter_challenge',({phrase,secs,rawDmg})=>{
+  G.counterActive=true;G.counterStartTs=Date.now();
+  setSpellsDisabled(true);showCounterChallenge(phrase,secs,rawDmg);
 });
-
-socket.on('counter_pending', ({ secs }) => {
-  const panel=document.getElementById('cpanel');
-  panel.className='cpanel waiting';
-  panel.innerHTML=`<div class="cp-lbl waiting">⏳ EL RIVAL CONTRAATACA</div>
+socket.on('counter_pending',({secs})=>{
+  const p=document.getElementById('cpanel');p.className='cpanel waiting';
+  p.innerHTML=`<div class="cp-lbl waiting">⏳ EL RIVAL CONTRAATACA</div>
     <div style="font-size:11px;color:rgba(255,160,50,.7);margin-top:3px;font-style:italic">Tiene ${secs}s...</div>`;
 });
-
-socket.on('counter_result', ({ success, rebound, dmg, defender }) => {
-  clearInterval(G.counterInterval);
-  G.counterActive=false;
-  const iAmDefender = defender === G.myIndex;
-  if (success) {
+socket.on('counter_result',({success,rebound,dmg,defender})=>{
+  clearInterval(G.counterInterval);G.counterActive=false;
+  const iAm=defender===G.myIndex;
+  if(success){
     showSfx('🛡️');
-    if (iAmDefender) { G.oppHP=Math.max(0,G.oppHP-rebound); addLog(`🛡️ ¡CONTRAATAQUE! ${rebound} daño de rebote`,'ct'); }
-    else { G.myHP=Math.max(0,G.myHP-rebound); document.getElementById('psp').classList.add('hit'); setTimeout(()=>document.getElementById('psp').classList.remove('hit'),500); addLog(`🛡️ El rival bloqueó — ${rebound} rebote`,'dm'); }
-    const panel=document.getElementById('cpanel'); panel.className='cpanel success';
-    panel.innerHTML=`<div class="cp-lbl success">✅ ${iAmDefender?'¡Bloqueaste el ataque!':'El rival bloqueó'}</div>`;
-  } else {
-    if (iAmDefender) { G.myHP=Math.max(0,G.myHP-dmg); document.getElementById('psp').classList.add('hit'); setTimeout(()=>document.getElementById('psp').classList.remove('hit'),500); addLog(`❌ Contraataque fallido. ${dmg} daño`,'dm'); }
-    else { G.oppHP=Math.max(0,G.oppHP-dmg); document.getElementById('esp').classList.add('hit'); setTimeout(()=>document.getElementById('esp').classList.remove('hit'),500); addLog(`⚔️ El rival falló. ${dmg} daño infligido`,'sc2'); }
-    const panel=document.getElementById('cpanel'); panel.className='cpanel fail';
-    panel.innerHTML=`<div class="cp-lbl fail">❌ ${iAmDefender?'Contraataque fallido':'El rival no bloqueó'}</div>`;
+    if(iAm){G.oppHP=Math.max(0,G.oppHP-rebound);addLog(`🛡️ ¡CONTRAATAQUE! ${rebound} daño de rebote`,'ct');}
+    else{G.myHP=Math.max(0,G.myHP-rebound);document.getElementById('psp').classList.add('hit');setTimeout(()=>document.getElementById('psp').classList.remove('hit'),500);addLog(`🛡️ El rival bloqueó — ${rebound} rebote`,'dm');}
+    const p=document.getElementById('cpanel');p.className='cpanel success';
+    p.innerHTML=`<div class="cp-lbl success">✅ ${iAm?'¡Bloqueaste el ataque!':'El rival bloqueó'}</div>`;
+  }else{
+    if(iAm){G.myHP=Math.max(0,G.myHP-dmg);document.getElementById('psp').classList.add('hit');setTimeout(()=>document.getElementById('psp').classList.remove('hit'),500);addLog(`❌ Contraataque fallido. ${dmg} daño`,'dm');}
+    else{G.oppHP=Math.max(0,G.oppHP-dmg);document.getElementById('esp').classList.add('hit');setTimeout(()=>document.getElementById('esp').classList.remove('hit'),500);addLog(`⚔️ El rival falló. ${dmg} daño infligido`,'sc2');}
+    const p=document.getElementById('cpanel');p.className='cpanel fail';
+    p.innerHTML=`<div class="cp-lbl fail">❌ ${iAm?'Contraataque fallido':'El rival no bloqueó'}</div>`;
   }
   updateBars();
-  setTimeout(()=>resetCounterPanel(), 1800);
+  setTimeout(()=>resetCounterPanel(),1800);
 });
-
-socket.on('turn_change', ({ turn }) => {
-  G.myTurn = turn === G.myIndex;
-  setSpellsDisabled(!G.myTurn);
-  updateTurn();
+socket.on('turn_change',({turn})=>{
+  G.myTurn=turn===G.myIndex;setSpellsDisabled(!G.myTurn);updateTurn();
 });
-
-socket.on('game_over', ({ winner, xpResult, newProfile }) => {
-  const iWon = winner === G.myIndex;
-  if (newProfile) G.profile = newProfile;
-  showXPResult(iWon, xpResult, newProfile);
+socket.on('game_over',({winner,xpResult,newProfile})=>{
+  const iWon=winner===G.myIndex;
+  if(newProfile)G.profile=newProfile;
+  showXPResult(iWon,xpResult,newProfile);
 });
-
-socket.on('opponent_disconnected', () => showXPResult(true, null, null, true));
+socket.on('opponent_disconnected',()=>showXPResult(true,null,null,true));
 
 // ── COUNTER UI ────────────────────────────────────────────────────────────────
-function showCounterChallenge(phrase, secs, rawDmg) {
-  const panel = document.getElementById('cpanel');
-  panel.className = 'cpanel active';
-  panel.innerHTML = `
+function showCounterChallenge(phrase,secs,rawDmg){
+  const panel=document.getElementById('cpanel');
+  panel.className='cpanel active';
+  panel.innerHTML=`
     <div class="cp-lbl active">⚡ ¡CONTRAATACA! DI ESTA FRASE:</div>
     <div class="cp-phrase">${phrase}</div>
     <div class="cp-bar-outer"><div class="cp-bar" id="cp-bar" style="width:100%;background:#f87171"></div></div>
     <div class="cp-row">
-      <button class="cp-mic" id="cp-mic" onclick="startCounterVoice('${phrase.replace(/'/g,"\\'")}',${rawDmg})" style="flex:1">🎤 GRITAR FRASE</button>
-      <div class="cp-timer" id="cp-timer" style="margin-left:8px">${secs.toFixed(1)}s</div>
+      <button class="cp-mic-btn" id="cp-mic" onclick="startCounterVoice('${phrase.replace(/'/g,"\\'")}')">🎤 GRITAR FRASE</button>
+      <div class="cp-timer" id="cp-timer">${secs.toFixed(1)}s</div>
     </div>`;
-  const deadline = Date.now() + secs*1000;
-  G.counterInterval = setInterval(() => {
-    const left = Math.max(0, deadline - Date.now());
-    const pct  = left/(secs*1000)*100;
-    const bar  = document.getElementById('cp-bar');
-    const txt  = document.getElementById('cp-timer');
-    if (bar) { bar.style.width = Math.round(pct)+'%'; bar.style.background = pct>50?'#f87171':pct>20?'#fbbf24':'#ef4444'; }
-    if (txt) txt.textContent = (left/1000).toFixed(1)+'s';
-    if (left <= 0) { clearInterval(G.counterInterval); socket.emit('counter_attempt', { success:false, reactionMs:null }); }
-  }, 100);
+  const deadline=Date.now()+secs*1000;
+  G.counterInterval=setInterval(()=>{
+    const left=Math.max(0,deadline-Date.now());
+    const pct=left/(secs*1000)*100;
+    const bar=document.getElementById('cp-bar'),txt=document.getElementById('cp-timer');
+    if(bar){bar.style.width=Math.round(pct)+'%';bar.style.background=pct>50?'#f87171':pct>20?'#fbbf24':'#ef4444';}
+    if(txt)txt.textContent=(left/1000).toFixed(1)+'s';
+    if(left<=0){clearInterval(G.counterInterval);socket.emit('counter_attempt',{success:false,reactionMs:null});}
+  },100);
 }
-
-function startCounterVoice(phrase) {
-  if (!isVoice()) { socket.emit('counter_attempt',{success:false,reactionMs:null}); return; }
+function startCounterVoice(phrase){
+  if(!isVoice()){socket.emit('counter_attempt',{success:false,reactionMs:null});return;}
   const btn=document.getElementById('cp-mic');
-  if (btn){btn.classList.add('on');btn.textContent='🔴 ESCUCHANDO...';}
+  if(btn){btn.classList.add('on');btn.textContent='🔴 ESCUCHANDO...';}
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  const r=new SR(); r.lang='es-ES'; r.interimResults=false; r.maxAlternatives=5;
+  const r=new SR();r.lang='es-ES';r.interimResults=false;r.maxAlternatives=5;
   r.onresult=e=>{
     let best='';
-    for(let i=0;i<e.results[0].length;i++) if(e.results[0][i].transcript.length>best.length) best=e.results[0][i].transcript;
+    for(let i=0;i<e.results[0].length;i++)if(e.results[0][i].transcript.length>best.length)best=e.results[0][i].transcript;
     document.getElementById('tx').textContent='"'+best+'"';
-    const words=phrase.toLowerCase().split(' ');
-    const sw=best.toLowerCase().split(' ');
+    const words=phrase.toLowerCase().split(' '),sw=best.toLowerCase().split(' ');
     let matched=0;
     words.forEach(w=>{if(sw.some(s=>s.includes(w.substring(0,4))||w.includes(s.substring(0,4))))matched++;});
     const success=matched/words.length>=0.5;
@@ -619,102 +727,79 @@ function startCounterVoice(phrase) {
   r.onend=()=>{};
   r.start();
 }
-
-function resetCounterPanel() {
-  const panel=document.getElementById('cpanel');
-  panel.className='cpanel idle';
-  panel.innerHTML=`<div class="cp-lbl idle">CONTRAATAQUE EN ESPERA</div>
-    <div style="font-size:11px;color:rgba(200,180,255,.38);font-style:italic">Cuando el rival ataque, aparece aquí</div>`;
+function resetCounterPanel(){
+  const p=document.getElementById('cpanel');
+  p.className='cpanel idle';
+  p.innerHTML=`<div class="cp-lbl idle">CONTRAATAQUE EN ESPERA</div>
+    <div style="font-size:11px;color:rgba(200,180,255,.35);font-style:italic;margin-top:2px">Cuando el rival ataque, aparece aquí</div>`;
 }
 
-// ── XP RESULT SCREEN ─────────────────────────────────────────────────────────
-function showXPResult(iWon, xpResult, newProfile, disconnected) {
-  const overlay = document.createElement('div');
-  overlay.className = 'xp-overlay';
-
-  let html = `<div class="xp-title ${iWon?'win':'loss'}">${disconnected?'🏃 RIVAL HUYÓ':iWon?'🏆 ¡VICTORIA!':'💀 DERROTA'}</div>`;
-
-  if (xpResult) {
-    const net = xpResult.gained;
-    html += `<div class="xp-gained${net<0?' neg':''}">${net>=0?'+':''}${net} XP</div>`;
-    html += `<div class="xp-breakdown">`;
-    for (const item of xpResult.log) {
-      const label = {
-        win:'Victoria',loss:'Participación',counter_success:'Contraataque exitoso',
-        counter_fail:'Contraataque fallido',combo:'Combo',
-        streak_3:'🔥 Racha x3',streak_5:'🔥 Racha x5',
-        reaction_fast:'⚡ Reacción ultra rápida',reaction_ok:'Reacción rápida',
-      }[item.event] || item.event;
-      html += `<div class="xp-row"><span>${label}</span><span class="${item.pts>=0?'pos':'neg2'}">${item.pts>=0?'+':''}${item.pts} XP</span></div>`;
+// ── XP RESULT ─────────────────────────────────────────────────────────────────
+function showXPResult(iWon,xpResult,newProfile,disconnected){
+  const ov=document.createElement('div');ov.className='xp-overlay';
+  let h=`<div class="xp-title ${iWon?'win':'loss'}">${disconnected?'🏃 RIVAL HUYÓ':iWon?'🏆 ¡VICTORIA!':'💀 DERROTA'}</div>`;
+  if(xpResult){
+    const net=xpResult.gained;
+    h+=`<div class="xp-gained${net<0?' neg':''}">${net>=0?'+':''}${net} XP</div>`;
+    h+=`<div class="xp-breakdown">`;
+    const labels={win:'Victoria',loss:'Participación',counter_success:'Contraataque exitoso',counter_fail:'Contraataque fallido',combo:'Combo',streak_3:'🔥 Racha x3',streak_5:'🔥 Racha x5',reaction_fast:'⚡ Reacción ultra rápida',reaction_ok:'Reacción rápida'};
+    for(const item of xpResult.log){
+      h+=`<div class="xp-row"><span>${labels[item.event]||item.event}</span><span class="${item.pts>=0?'pos':'neg2'}">${item.pts>=0?'+':''}${item.pts} XP</span></div>`;
     }
-    html += `</div>`;
+    h+=`</div>`;
   }
-
-  if (xpResult?.leveledUp && newProfile) {
-    html += `<div class="lvlup-banner">✨ ¡SUBISTE A ${newProfile.levelName.toUpperCase()}! ✨</div>`;
-  }
-
-  if (newProfile) {
-    const lvlMeta = LEVEL_META.find(l=>l.n===newProfile.level)||LEVEL_META[0];
-    const xpCurrent = XP_THRESHOLDS[newProfile.level-1]||0;
-    const xpNext = XP_THRESHOLDS[newProfile.level]||newProfile.xp;
-    const xpRange = xpNext-xpCurrent;
-    const pct = newProfile.next ? Math.min(100,Math.round((newProfile.xp-xpCurrent)/xpRange*100)) : 100;
-    html += `<div class="new-xp-bar">
-      <div class="new-lvl-label" style="color:${lvlMeta.color}">${lvlMeta.icon} Nv.${newProfile.level} — ${newProfile.xp} XP total · ${newProfile.next?newProfile.next.needed+' para '+newProfile.next.nextName:'Nivel máximo'}</div>
-      <div class="xp-bar-outer"><div class="xp-bar-inner" style="width:${pct}%"></div></div>
+  if(xpResult?.leveledUp&&newProfile)h+=`<div class="lvlup-banner">✨ ¡SUBISTE A ${newProfile.levelName.toUpperCase()}! ✨</div>`;
+  if(newProfile){
+    const lm=LEVEL_META.find(l=>l.n===newProfile.level)||LEVEL_META[0];
+    const xpC=XP_THRESHOLDS[newProfile.level-1]||0;
+    const xpN=XP_THRESHOLDS[newProfile.level]||newProfile.xp;
+    const pct=newProfile.next?Math.min(100,Math.round((newProfile.xp-xpC)/(xpN-xpC)*100)):100;
+    h+=`<div class="new-xp-bar">
+      <div class="new-lvl-lbl" style="color:${lm.color}">${lm.icon} Nv.${newProfile.level} — ${newProfile.xp} XP · ${newProfile.next?newProfile.next.needed+' para '+newProfile.next.nextName:'Nivel máximo'}</div>
+      <div class="xpb-outer"><div class="xpb-inner" style="width:${pct}%"></div></div>
     </div>`;
-    const avgRxn = newProfile.stats.avgReactionMs?(newProfile.stats.avgReactionMs/1000).toFixed(2)+'s':'—';
-    const wr = newProfile.stats.wins+newProfile.stats.losses>0?Math.round(newProfile.stats.wins/(newProfile.stats.wins+newProfile.stats.losses)*100)+'%':'—';
-    html += `<div class="new-profile-stats">
-      <div class="stat-box"><div class="stat-val">${newProfile.stats.wins}</div><div class="stat-lbl">Victorias</div></div>
-      <div class="stat-box"><div class="stat-val">${wr}</div><div class="stat-lbl">Win %</div></div>
-      <div class="stat-box"><div class="stat-val">${newProfile.streak||0}</div><div class="stat-lbl">Racha</div></div>
-      <div class="stat-box"><div class="stat-val">${avgRxn}</div><div class="stat-lbl">Reacción</div></div>
+    const avgRxn=newProfile.stats.avgReactionMs?(newProfile.stats.avgReactionMs/1000).toFixed(2)+'s':'—';
+    const wr=newProfile.stats.wins+newProfile.stats.losses>0?Math.round(newProfile.stats.wins/(newProfile.stats.wins+newProfile.stats.losses)*100)+'%':'—';
+    h+=`<div class="result-stats">
+      <div class="sbox"><div class="sbox-val">${newProfile.stats.wins}</div><div class="sbox-lbl">Victorias</div></div>
+      <div class="sbox"><div class="sbox-val">${wr}</div><div class="sbox-lbl">Win %</div></div>
+      <div class="sbox"><div class="sbox-val">${newProfile.streak||0}</div><div class="sbox-lbl">Racha</div></div>
+      <div class="sbox"><div class="sbox-val">${avgRxn}</div><div class="sbox-lbl">Reacción</div></div>
     </div>`;
   }
-
-  html += `<button class="btn btn-gold" style="max-width:280px" onclick="goLobby()">⚡ VOLVER AL CASTILLO</button>`;
-  overlay.innerHTML = html;
-  document.body.appendChild(overlay);
+  h+=`<button class="btn btn-gold" onclick="goLobby()">⚡ VOLVER AL CASTILLO</button>`;
+  ov.innerHTML=h;document.body.appendChild(ov);
 }
-
-function goLobby() {
+function goLobby(){
   document.querySelector('.xp-overlay')?.remove();
-  document.getElementById('game').style.display = 'none';
-  document.getElementById('lobby-screen').style.display = 'flex';
-  document.getElementById('room-btns').style.display = 'block';
-  document.getElementById('code-display').style.display = 'none';
-  G.myIndex=null; G.myHP=100; G.oppHP=100; G.myTurn=false; G.counterActive=false;
+  document.getElementById('game').style.display='none';
+  document.getElementById('lobby-screen').style.display='flex';
+  document.getElementById('room-btns').style.display='block';
+  document.getElementById('code-display').style.display='none';
+  G.myIndex=null;G.myHP=100;G.oppHP=100;G.myTurn=false;G.counterActive=false;
   clearInterval(G.counterInterval);
   renderLobby();
 }
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
-function updateTurn() {
-  const tind = document.getElementById('tind');
-  tind.className = G.myTurn ? 'tind mine' : 'tind';
-  tind.textContent = G.myTurn ? '⚡ TU TURNO — lanza un hechizo' : 'Turno del rival...';
+function updateTurn(){
+  const el=document.getElementById('tind');
+  el.className=G.myTurn?'tind mine':'tind';
+  el.textContent=G.myTurn?'⚡ TU TURNO — lanza un hechizo':'Turno del rival...';
 }
-
-function updateBars() {
-  const ph=Math.max(0,G.myHP), eh=Math.max(0,G.oppHP);
+function updateBars(){
+  const ph=Math.max(0,G.myHP),eh=Math.max(0,G.oppHP);
   document.getElementById('php').style.width=ph+'%';
   document.getElementById('ehp').style.width=eh+'%';
   document.getElementById('pht').textContent=ph+' / 100';
   document.getElementById('eht').textContent=eh+' / 100';
 }
-
-function addLog(msg, cls) {
-  document.getElementById('blog').innerHTML=`<div class="le ${cls}">${msg}</div>`;
-}
-
-function showSfx(icon) {
-  const el=document.createElement('div'); el.className='sfx'; el.textContent=icon;
+function addLog(msg,cls){document.getElementById('blog').innerHTML=`<div class="le ${cls}">${msg}</div>`;}
+function showSfx(icon){
+  const el=document.createElement('div');el.className='sfx';el.textContent=icon;
   document.getElementById('arena').appendChild(el);
   setTimeout(()=>el.remove(),900);
 }
-
 function isVoice(){return !!(window.SpeechRecognition||window.webkitSpeechRecognition);}
 </script>
 </body>
