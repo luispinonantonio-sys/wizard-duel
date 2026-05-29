@@ -282,16 +282,20 @@ io.on('connection', socket => {
     socket.join(code);
     socket.roomCode = code;
     socket.playerIndex = 0;
-    console.log('room created:', code, '| total rooms:', Object.keys(rooms).length);
+    console.log(`[${INSTANCE_ID}] room created: ${code} | total rooms: ${Object.keys(rooms).length}`);
     socket.emit('room_created', { code, level: level.n });
   });
 
   socket.on('join_room', ({ code, path }) => {
     if (!socket.username) { socket.emit('error', { msg: 'Inicia sesión primero' }); return; }
     const normalCode = (code || '').trim().toUpperCase();
-    console.log('join attempt:', normalCode, '| existing rooms:', Object.keys(rooms));
+    console.log(`[${INSTANCE_ID}] join attempt: ${normalCode} | existing rooms:`, Object.keys(rooms));
     const room = rooms[normalCode];
-    if (!room) { socket.emit('error', { msg: 'Sala no encontrada — ¿el código es correcto?' }); return; }
+    if (!room) {
+      console.log(`[${INSTANCE_ID}] Room ${normalCode} NOT FOUND — this may be a multi-instance issue`);
+      socket.emit('error', { msg: `Sala no encontrada (${normalCode}) — verifica el código` });
+      return;
+    }
     if (room.sockets[1]) { socket.emit('error', { msg: 'Sala llena' }); return; }
 
     const r1 = stmts.findUser.get(socket.username);
@@ -555,4 +559,13 @@ function publicProfile(p) {
 }
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Wizard Duel v2 running on port ${PORT}`));
+const INSTANCE_ID = Math.random().toString(36).substring(2,6).toUpperCase();
+server.listen(PORT, () => {
+  console.log(`Wizard Duel v2 running on port ${PORT} — instance ${INSTANCE_ID}`);
+});
+
+// Log active rooms every 30s so we can debug missing rooms
+setInterval(() => {
+  const codes = Object.keys(rooms);
+  if(codes.length > 0) console.log(`[${INSTANCE_ID}] Active rooms:`, codes);
+}, 30000);
