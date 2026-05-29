@@ -37,9 +37,15 @@ db.exec(`
     rxn_samples   INTEGER NOT NULL DEFAULT 0,
     created_at    INTEGER NOT NULL DEFAULT (unixepoch())
   );
-  -- add avatar column if upgrading from older DB
-  ALTER TABLE profiles ADD COLUMN avatar TEXT NOT NULL DEFAULT '🧙';
 `);
+
+// Safely add avatar column for existing DBs that don't have it yet
+try {
+  db.exec(`ALTER TABLE profiles ADD COLUMN avatar TEXT NOT NULL DEFAULT '🧙'`);
+  console.log('avatar column added');
+} catch(e) {
+  // column already exists — ignore
+}
 
 const stmts = {
   findUser:      db.prepare('SELECT * FROM profiles WHERE username = ?'),
