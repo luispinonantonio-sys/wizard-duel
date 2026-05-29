@@ -853,38 +853,38 @@ function cpuChooseSpell(room) {
   const cpuEnergyPct = cpu.energy / MAX_ENERGY;
 
   // Score each spell based on game state
+  // CPU makes mistakes ~35% of the time to be beatable
   function scoreSpell(key) {
     const s = CATALOG[key];
     if (!s) return 0;
-    let score = Math.random() * 20; // base randomness
+
+    // 35% chance to just pick randomly (CPU "loses focus")
+    if (Math.random() < 0.35) return Math.random() * 30;
+
+    let score = Math.random() * 15; // base randomness
 
     // Aggressive — attack when player is weak
     if (s.dmg > 0) {
-      score += (1 - playerHPPct) * 40;   // more valuable when player is low
-      score += s.power * 15;              // prefer powerful spells
-      if (playerEnergyPct < 0.3) score += 25; // player can't afford strong defense
+      score += (1 - playerHPPct) * 25;   // reduced from 40
+      score += s.power * 8;              // reduced from 15
+      if (playerEnergyPct < 0.3) score += 15; // reduced from 25
     }
 
     // Defensive — heal/shield when CPU is weak
     if (s.heal > 0) {
-      score += (1 - cpuHPPct) * 50;      // very valuable when CPU is low
-      score += s.heal * 0.8;
+      score += (1 - cpuHPPct) * 30;      // reduced from 50
+      score += s.heal * 0.5;             // reduced from 0.8
     }
     if (s.shield) {
-      // shield when player likely to attack (high energy) or CPU is low
-      score += (1 - cpuHPPct) * 30;
-      score += playerEnergyPct * 25;      // player has energy to attack
+      score += (1 - cpuHPPct) * 18;      // reduced from 30
+      score += playerEnergyPct * 15;     // reduced from 25
     }
     if (s.reflect) {
-      score += playerEnergyPct * 35;      // good when player will attack
+      score += playerEnergyPct * 20;     // reduced from 35
     }
 
-    // Energy management — don't waste energy on expensive spells if low
-    if (cpuEnergyPct < 0.4 && s.cost > 35) score -= 30;
-    if (cpuEnergyPct > 0.8 && s.cost > 40) score += 10; // spend energy when full
-
-    // Legendary bonus
-    if (s.legendary) score += 20;
+    // Energy management — simplified, makes mistakes more often
+    if (cpuEnergyPct < 0.3 && s.cost > 35) score -= 20;
 
     return score;
   }
@@ -923,8 +923,8 @@ function scheduleCpuTurn(code, room, io) {
   if (!rooms[code] || !room.isCpu) return;
   if (room.state.phase !== 'simultaneous') return;
 
-  // CPU "thinks" for 0.5-2.5 seconds to feel natural
-  const thinkTime = 500 + Math.random() * 2000;
+  // CPU thinks for 1-3.5 seconds — gives player more time
+  const thinkTime = 1000 + Math.random() * 2500;
   setTimeout(() => {
     if (!rooms[code] || room.state.phase !== 'simultaneous') return;
     const spell = cpuChooseSpell(room);
