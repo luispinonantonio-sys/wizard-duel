@@ -372,6 +372,11 @@ io.on('connection', socket => {
         console.log(`[${INSTANCE_ID}] Session restored for ${u} in room ${pendingCode} player ${pi}`);
         // cancel any pending delete
         if (room._deleteTO) { clearTimeout(room._deleteTO); room._deleteTO = null; }
+        // send queued duel_start if player missed it
+        if (pi === 0 && room._pendingDuelStart0) {
+          socket.emit('duel_start', { ...room._pendingDuelStart0, state: room.state });
+          room._pendingDuelStart0 = null;
+        }
         // notify opponent that player is back
         const oppIdx = pi === 0 ? 1 : 0;
         if (room.sockets[oppIdx]) {
@@ -471,26 +476,34 @@ io.on('connection', socket => {
 
     // Send each player their own index + opponent info
     // Guard against null sockets (player may have briefly disconnected while waiting)
+    const p0Avatar = p0 ? (p0.avatar||'🧙')   : '🧙';
+    const p1Avatar = p1 ? (p1.avatar||'🧙‍♀️') : '🧙‍♀️';
+
     if (room.sockets[0]) {
       room.sockets[0].emit('duel_start', {
         yourIndex: 0,
         yourLevel: calcLevel(p0.xp).n,
-        oppLevel: calcLevel(p1.xp).n,
-        oppName: socket.username,
-        oppAvatar: p1 ? (p1.avatar||'🧙‍♀️') : '🧙‍♀️',
+        oppLevel:  calcLevel(p1.xp).n,
+        oppName:   socket.username,
+        oppAvatar: p1Avatar,
         state: room.state,
       });
     } else {
-      // Player 0 disconnected — they'll receive duel_start when they reconnect
-      console.log(`[${INSTANCE_ID}] Player 0 offline when duel started in room ${code} — will receive on reconnect`);
+      // store for reconnect
+      room._pendingDuelStart0 = {
+        yourIndex:0, yourLevel:calcLevel(p0.xp).n,
+        oppLevel:calcLevel(p1.xp).n, oppName:socket.username,
+        oppAvatar:p1Avatar
+      };
+      console.log(`[${INSTANCE_ID}] Player 0 offline — duel_start queued`);
     }
     if (room.sockets[1]) {
       room.sockets[1].emit('duel_start', {
         yourIndex: 1,
         yourLevel: calcLevel(p1.xp).n,
-        oppLevel: calcLevel(p0.xp).n,
-        oppName: room.state.players[0].username,
-        oppAvatar: p0 ? (p0.avatar||'🧙') : '🧙',
+        oppLevel:  calcLevel(p0.xp).n,
+        oppName:   room.state.players[0].username,
+        oppAvatar: p0Avatar,
         state: room.state,
       });
     }
