@@ -714,6 +714,8 @@ socket.on('error',({msg})=>setLobbyMsg(msg,'err'));
 // ── DUEL START ────────────────────────────────────────────────────────────────
 socket.on('duel_start',({yourIndex,yourLevel,oppLevel,oppName,oppAvatar})=>{
   G.myIndex=yourIndex; G.myHP=100; G.oppHP=100; G.myTurn=yourIndex===0;
+  updateBars(); // reset HP bars visually
+  resetCounterPanel(); // reset counter panel
   document.getElementById('lobby-screen').style.display='none';
   const gameEl=document.getElementById('game');
   gameEl.style.display='flex';
@@ -739,6 +741,7 @@ socket.on('duel_start',({yourIndex,yourLevel,oppLevel,oppName,oppAvatar})=>{
   setSpellsDisabled(!G.myTurn);
   updateTurn();
   addLog('⚔️ ¡El duelo comienza!','');
+  document.getElementById('tind').textContent='—';
   // auto-mic for player 0 who goes first
   if(G.myTurn && isVoice()){
     setTimeout(()=>{ if(G.myTurn && !G.listening) startListen(); }, 600);
@@ -906,8 +909,10 @@ socket.on('turn_change',({turn,spellOrder,castSecs,castDeadline})=>{
 socket.on('game_over',({winner,xpResult,newProfile})=>{
   const iWon=winner===G.myIndex;
   if(newProfile)G.profile=newProfile;
-  musicStop();
-  setTimeout(()=>playSound(iWon?'victory':'defeat'),900);
+  clearInterval(G.castInterval); resetCastTimer();  // stop cast timer
+  stopListen();                                       // stop mic
+  musicStop(true); // immediate stop
+  setTimeout(()=>playSound(iWon?'victory':'defeat'),400);
   showXPResult(iWon,xpResult,newProfile);
 });
 socket.on('opponent_disconnected',()=>{ musicStop(); showXPResult(true,null,null,true); });
@@ -1207,15 +1212,20 @@ function musicStart(){
   }catch(e){console.warn('music error',e);}
 }
 
-function musicStop(){
+function musicStop(immediate=false){
   try{
     _mplaying=false;
     _mDanger=false;
     clearTimeout(_mLoopTO);
     if(_mctx){
       const t=_mctx.currentTime;
-      _mmaster.gain.linearRampToValueAtTime(0.0001,t+0.8);
-      setTimeout(()=>{ _mmaster.gain.setValueAtTime(0.25,_mctx.currentTime); },900);
+      const fadeTime = immediate ? 0.1 : 0.6;
+      _mmaster.gain.cancelScheduledValues(t);
+      _mmaster.gain.setValueAtTime(_mmaster.gain.value, t);
+      _mmaster.gain.linearRampToValueAtTime(0.0001, t+fadeTime);
+      setTimeout(()=>{
+        if(_mmaster) _mmaster.gain.setValueAtTime(0.25, _mctx.currentTime);
+      }, (fadeTime+0.1)*1000);
     }
   }catch(e){}
 }
