@@ -390,6 +390,17 @@ input.code-inp:focus{border-color:#60a5fa}
     <div style="font-size:11px;color:rgba(200,180,255,.35);font-style:italic;margin-top:2px">Cuando el rival ataque, aparece aquí</div>
   </div>
 
+  <!-- cast timer -->
+  <div style="padding:4px 12px 2px;flex-shrink:0" id="cast-timer-wrap" style="display:none">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+      <div style="font-family:Cinzel,serif;font-size:9px;letter-spacing:2px;color:rgba(200,180,255,.5)" id="cast-lbl">ELIGE TU HECHIZO</div>
+      <div style="font-family:Cinzel,serif;font-size:16px;font-weight:700;color:#e8c87a" id="cast-secs">4.0s</div>
+    </div>
+    <div style="height:5px;background:rgba(255,255,255,.1);border-radius:3px;overflow:hidden">
+      <div id="cast-bar" style="height:100%;border-radius:3px;background:#e8c87a;width:100%;transition:width .1s linear"></div>
+    </div>
+  </div>
+
   <div class="sb">
     <div class="sbt">— GRIMORIO —</div>
     <div class="sgrid" id="sgrid"></div>
@@ -438,7 +449,7 @@ let G={
   myIndex:null,myHP:100,oppHP:100,
   myTurn:false,counterActive:false,
   listening:false,recognition:null,atkRec:null,
-  counterInterval:null,counterStartTs:0,
+  counterInterval:null,counterStartTs:0,castInterval:null,
 };
 
 const socket=io();
@@ -560,6 +571,8 @@ socket.on('duel_start',({yourIndex,yourLevel,oppLevel,oppName})=>{
   document.getElementById('p-lvl').textContent=myM.icon+' '+myM.name+' · '+G.profile.counterSecs+'s';
   document.getElementById('opp-name').textContent='🧙‍♀️ '+oppName.toUpperCase();
   document.getElementById('opp-lvl').textContent=opM.icon+' '+opM.name;
+  _initAudio();
+  musicStart();
   renderSpells();
   setSpellsDisabled(!G.myTurn);
   updateTurn();
@@ -586,6 +599,7 @@ function setSpellsDisabled(d){
 }
 function clickSpell(sk){
   if(!G.myTurn||G.counterActive)return;
+  playSound(sk);
   socket.emit('cast_spell',{spell:sk});
   document.getElementById('psp').classList.add('casting');
   setTimeout(()=>document.getElementById('psp').classList.remove('casting'),600);
@@ -630,22 +644,28 @@ socket.on('spell_result',({caster,spell,effect,dmg,heal})=>{
   showSfx(s.icon);
   const isMe=caster===G.myIndex;
   if(effect==='attack'){
+    if(!isMe)playSound(spell);
+    playSound('hit');
     document.getElementById(isMe?'esp':'psp').classList.add('hit');
     setTimeout(()=>document.getElementById(isMe?'esp':'psp').classList.remove('hit'),500);
     addLog(isMe?`${s.icon} ¡${s.name}! El rival puede contraatacar...`:`${s.icon} ¡${s.name}! ¡CONTRAATACA!`,isMe?'sc2':'dm');
   }else if(effect==='shield'){
+    if(!isMe)playSound('protego');
     addLog(isMe?'🛡️ ¡Protego! Escudo activo.':'⚔️ El rival activa Protego.','sc2');
   }else if(effect==='heal'){
+    if(!isMe)playSound(spell);
     if(isMe){G.myHP=Math.min(100,G.myHP+heal);addLog(`🌟 +${heal} HP`,'hl');}
     else{G.oppHP=Math.min(100,G.oppHP+heal);addLog(`🌟 El rival se cura ${heal} HP`,'hl');}
     updateBars();
   }else if(effect==='stun'){
-    if(!isMe){G.myHP=Math.max(0,G.myHP-dmg);document.getElementById('psp').classList.add('hit');setTimeout(()=>document.getElementById('psp').classList.remove('hit'),500);addLog(`🌀 ¡${s.name}! ${dmg} daño + aturdido`,'dm');}
+    if(!isMe)playSound(spell);
+    if(!isMe){G.myHP=Math.max(0,G.myHP-dmg);document.getElementById('psp').classList.add('hit');setTimeout(()=>document.getElementById('psp').classList.remove('hit'),500);addLog(`🌀 ¡${s.name}! ${dmg} daño + aturdido`,'dm');playSound('hit');}
     else{G.oppHP=Math.max(0,G.oppHP-dmg);document.getElementById('esp').classList.add('hit');setTimeout(()=>document.getElementById('esp').classList.remove('hit'),500);addLog(`🌀 ¡${s.name}! ${dmg} daño + rival aturdido`,'sc2');}
     updateBars();
   }
 });
 socket.on('counter_challenge',({phrase,secs,rawDmg})=>{
+  playSound('shield_hit');
   G.counterActive=true;G.counterStartTs=Date.now();
   setSpellsDisabled(true);showCounterChallenge(phrase,secs,rawDmg);
 });
@@ -658,12 +678,14 @@ socket.on('counter_result',({success,rebound,dmg,defender})=>{
   clearInterval(G.counterInterval);G.counterActive=false;
   const iAm=defender===G.myIndex;
   if(success){
+    playSound('counter');
     showSfx('🛡️');
     if(iAm){G.oppHP=Math.max(0,G.oppHP-rebound);addLog(`🛡️ ¡CONTRAATAQUE! ${rebound} daño de rebote`,'ct');}
-    else{G.myHP=Math.max(0,G.myHP-rebound);document.getElementById('psp').classList.add('hit');setTimeout(()=>document.getElementById('psp').classList.remove('hit'),500);addLog(`🛡️ El rival bloqueó — ${rebound} rebote`,'dm');}
+    else{G.myHP=Math.max(0,G.myHP-rebound);document.getElementById('psp').classList.add('hit');setTimeout(()=>document.getElementById('psp').classList.remove('hit'),500);addLog(`🛡️ El rival bloqueó — ${rebound} rebote`,'dm');playSound('hit');}
     const p=document.getElementById('cpanel');p.className='cpanel success';
     p.innerHTML=`<div class="cp-lbl success">✅ ${iAm?'¡Bloqueaste el ataque!':'El rival bloqueó'}</div>`;
   }else{
+    playSound('hit');
     if(iAm){G.myHP=Math.max(0,G.myHP-dmg);document.getElementById('psp').classList.add('hit');setTimeout(()=>document.getElementById('psp').classList.remove('hit'),500);addLog(`❌ Contraataque fallido. ${dmg} daño`,'dm');}
     else{G.oppHP=Math.max(0,G.oppHP-dmg);document.getElementById('esp').classList.add('hit');setTimeout(()=>document.getElementById('esp').classList.remove('hit'),500);addLog(`⚔️ El rival falló. ${dmg} daño infligido`,'sc2');}
     const p=document.getElementById('cpanel');p.className='cpanel fail';
@@ -672,15 +694,31 @@ socket.on('counter_result',({success,rebound,dmg,defender})=>{
   updateBars();
   setTimeout(()=>resetCounterPanel(),1800);
 });
-socket.on('turn_change',({turn})=>{
+socket.on('turn_skipped',({skipped})=>{
+  playSound('timeout');
+  clearInterval(G.castInterval);
+  resetCastTimer();
+  if(skipped===G.myIndex){
+    addLog('⏰ Tiempo agotado — perdiste el turno','dm');
+  } else {
+    addLog('⏰ El rival tardó demasiado — es tu turno','hl');
+  }
+});
+
+socket.on('turn_change',({turn,spellOrder,castSecs,castDeadline})=>{
+  if(spellOrder && turn===G.myIndex) reshuffleSpells(spellOrder);
+  if(castSecs && turn===G.myIndex) startCastTimer(castSecs, castDeadline);
+  else { clearInterval(G.castInterval); resetCastTimer(); }
   G.myTurn=turn===G.myIndex;setSpellsDisabled(!G.myTurn);updateTurn();
 });
 socket.on('game_over',({winner,xpResult,newProfile})=>{
   const iWon=winner===G.myIndex;
   if(newProfile)G.profile=newProfile;
+  musicStop();
+  setTimeout(()=>playSound(iWon?'victory':'defeat'),900);
   showXPResult(iWon,xpResult,newProfile);
 });
-socket.on('opponent_disconnected',()=>showXPResult(true,null,null,true));
+socket.on('opponent_disconnected',()=>{ musicStop(); showXPResult(true,null,null,true); });
 
 // ── COUNTER UI ────────────────────────────────────────────────────────────────
 function showCounterChallenge(phrase,secs,rawDmg){
@@ -748,7 +786,7 @@ function showXPResult(iWon,xpResult,newProfile,disconnected){
     }
     h+=`</div>`;
   }
-  if(xpResult?.leveledUp&&newProfile)h+=`<div class="lvlup-banner">✨ ¡SUBISTE A ${newProfile.levelName.toUpperCase()}! ✨</div>`;
+  if(xpResult?.leveledUp&&newProfile){playSound('levelup');h+=`<div class="lvlup-banner">✨ ¡SUBISTE A ${newProfile.levelName.toUpperCase()}! ✨</div>`;}
   if(newProfile){
     const lm=LEVEL_META.find(l=>l.n===newProfile.level)||LEVEL_META[0];
     const xpC=XP_THRESHOLDS[newProfile.level-1]||0;
@@ -776,8 +814,9 @@ function goLobby(){
   document.getElementById('lobby-screen').style.display='flex';
   document.getElementById('room-btns').style.display='block';
   document.getElementById('code-display').style.display='none';
+  musicStop();
   G.myIndex=null;G.myHP=100;G.oppHP=100;G.myTurn=false;G.counterActive=false;
-  clearInterval(G.counterInterval);
+  clearInterval(G.counterInterval);clearInterval(G.castInterval);resetCastTimer();
   renderLobby();
 }
 
@@ -793,6 +832,7 @@ function updateBars(){
   document.getElementById('ehp').style.width=eh+'%';
   document.getElementById('pht').textContent=ph+' / 100';
   document.getElementById('eht').textContent=eh+' / 100';
+  musicSetDanger(ph<=30);
 }
 function addLog(msg,cls){document.getElementById('blog').innerHTML=`<div class="le ${cls}">${msg}</div>`;}
 function showSfx(icon){
@@ -800,6 +840,402 @@ function showSfx(icon){
   document.getElementById('arena').appendChild(el);
   setTimeout(()=>el.remove(),900);
 }
+function reshuffleSpells(order){
+  const grid=document.getElementById('sgrid');
+  const cards=[...grid.querySelectorAll('.sc')];
+  // reorder DOM to match new shuffle
+  const bySpell={};
+  cards.forEach(c=>bySpell[c.dataset.spell]=c);
+  order.forEach(sk=>{
+    const c=bySpell[sk];
+    if(c) grid.appendChild(c);
+  });
+  // flash each card
+  cards.forEach((c,i)=>{
+    setTimeout(()=>{
+      c.style.transform='scale(0.85)';
+      setTimeout(()=>c.style.transform='',120);
+    },i*40);
+  });
+}
+
+function startCastTimer(secs, deadline){
+  clearInterval(G.castInterval);
+  const wrap=document.getElementById('cast-timer-wrap');
+  const bar=document.getElementById('cast-bar');
+  const secsTxt=document.getElementById('cast-secs');
+  const lbl=document.getElementById('cast-lbl');
+  wrap.style.display='block';
+  lbl.textContent='ELIGE TU HECHIZO';
+  bar.style.background='#e8c87a';
+  const total=secs*1000;
+  G.castInterval=setInterval(()=>{
+    const left=Math.max(0,deadline-Date.now());
+    const pct=left/total*100;
+    bar.style.width=Math.round(pct)+'%';
+    secsTxt.textContent=(left/1000).toFixed(1)+'s';
+    bar.style.background=pct>50?'#e8c87a':pct>20?'#fbbf24':'#ef4444';
+    secsTxt.style.color=pct>50?'#e8c87a':pct>20?'#fbbf24':'#ef4444';
+    if(left<=0){
+      clearInterval(G.castInterval);
+      resetCastTimer();
+    }
+  },100);
+}
+
+function resetCastTimer(){
+  const wrap=document.getElementById('cast-timer-wrap');
+  const bar=document.getElementById('cast-bar');
+  const secsTxt=document.getElementById('cast-secs');
+  wrap.style.display='none';
+  bar.style.width='100%';
+  secsTxt.textContent='4.0s';
+  secsTxt.style.color='#e8c87a';
+}
+
+
+
+// ── MUSIC ENGINE ─────────────────────────────────────────────────────────────
+let _mctx=null,_mmaster=null,_gSoft=null,_gFull=null;
+let _mplaying=false,_mDanger=false,_mLoopTO=null;
+
+function _musicInit(){
+  if(_mctx)return;
+  _mctx=new(window.AudioContext||window.webkitAudioContext)();
+  _mmaster=_mctx.createGain(); _mmaster.gain.value=0.25;
+  _gSoft=_mctx.createGain(); _gSoft.gain.value=1; _gSoft.connect(_mmaster);
+  _gFull=_mctx.createGain(); _gFull.gain.value=0.0001; _gFull.connect(_mmaster);
+  _mmaster.connect(_mctx.destination);
+}
+
+function _sq(f,dest,t,dur,v=0.28){
+  if(!f||f<=0)return;
+  const o=_mctx.createOscillator(),g=_mctx.createGain();
+  o.type='square';o.frequency.value=f;
+  g.gain.setValueAtTime(0.0001,t);
+  g.gain.linearRampToValueAtTime(v,t+0.005);
+  g.gain.setValueAtTime(v,t+dur-0.008);
+  g.gain.linearRampToValueAtTime(0.0001,t+dur);
+  o.connect(g);g.connect(dest);o.start(t);o.stop(t+dur+0.02);
+}
+function _tr(f,dest,t,dur,v=0.32){
+  if(!f||f<=0)return;
+  const o=_mctx.createOscillator(),g=_mctx.createGain();
+  o.type='triangle';o.frequency.value=f;
+  g.gain.setValueAtTime(0.0001,t);
+  g.gain.linearRampToValueAtTime(v,t+0.008);
+  g.gain.setValueAtTime(v,t+dur-0.01);
+  g.gain.linearRampToValueAtTime(0.0001,t+dur);
+  o.connect(g);g.connect(dest);o.start(t);o.stop(t+dur+0.02);
+}
+function _kk(dest,t,v=0.32){
+  const o=_mctx.createOscillator(),g=_mctx.createGain();
+  o.type='square';
+  o.frequency.setValueAtTime(150,t);
+  o.frequency.exponentialRampToValueAtTime(40,t+0.08);
+  g.gain.setValueAtTime(v,t);g.gain.setTargetAtTime(0.0001,t,0.04);
+  o.connect(g);g.connect(dest);o.start(t);o.stop(t+0.2);
+}
+function _hh(dest,t,v=0.055){
+  const len=Math.ceil(_mctx.sampleRate*0.035);
+  const buf=_mctx.createBuffer(1,len,_mctx.sampleRate);
+  const d=buf.getChannelData(0);for(let i=0;i<len;i++)d[i]=Math.random()*2-1;
+  const src=_mctx.createBufferSource();src.buffer=buf;
+  const g=_mctx.createGain(),hp=_mctx.createBiquadFilter();
+  hp.type='highpass';hp.frequency.value=8000;
+  g.gain.setValueAtTime(v,t);g.gain.setTargetAtTime(0.0001,t,0.012);
+  src.connect(hp);hp.connect(g);g.connect(dest);src.start(t);src.stop(t+0.05);
+}
+
+function _scheduleSoft(st){
+  const B=60/160;
+  [220,220,220,220,196,196,196,196,
+   175,175,175,175,147,147,147,147,
+   175,175,196,196,220,220,247,247,
+   220,220,196,196,175,175,220,220].forEach((f,i)=>_tr(f,_gSoft,st+i*B,B*0.88,0.26));
+  const harm=[
+    659,0,659,0,784,659,0,587,0,587,659,587,
+    523,0,523,659,523,0,440,0,392,0,330,0,
+    392,440,523,587,659,0,587,523,440,392,330,294,
+    330,392,440,523,587,659,587,659,784,0,659,0,
+  ];
+  harm.forEach((f,i)=>_sq(f,_gSoft,st+i*B*0.5,B*0.42,0.09));
+  return B*32;
+}
+
+function _scheduleFull(st){
+  const B=60/160;
+  const mel=[
+    880,0,880,0,1047,880,0,784,0,784,880,784,
+    659,0,659,784,659,0,587,0,523,0,440,0,
+    523,587,659,784,880,0,784,659,587,523,440,392,
+    440,523,587,659,784,880,784,880,1047,0,880,0,
+  ];
+  mel.forEach((f,i)=>_sq(f,_gFull,st+i*B*0.5,B*0.44,0.27));
+  const harm=[
+    659,0,659,0,784,659,0,587,0,587,659,587,
+    523,0,523,659,523,0,440,0,392,0,330,0,
+    392,440,523,587,659,0,587,523,440,392,330,294,
+    330,392,440,523,587,659,587,659,784,0,659,0,
+  ];
+  harm.forEach((f,i)=>_sq(f,_gFull,st+i*B*0.5,B*0.42,0.16));
+  [220,220,220,220,196,196,196,196,
+   175,175,175,175,147,147,147,147,
+   175,175,196,196,220,220,247,247,
+   220,220,196,196,175,175,220,220].forEach((f,i)=>_tr(f,_gFull,st+i*B,B*0.88,0.30));
+  for(let i=0;i<16;i++){
+    _kk(_gFull,st+i*B,0.26);
+    if(i%2===1)_kk(_gFull,st+i*B,0.13);
+    _hh(_gFull,st+i*B*0.5,0.055);
+  }
+  return B*32;
+}
+
+function _musicTick(){
+  if(!_mplaying)return;
+  const t=_mctx.currentTime+0.05;
+  const dur=_scheduleSoft(t);
+  _scheduleFull(t);
+  _mLoopTO=setTimeout(_musicTick,(dur-0.15)*1000);
+}
+
+function musicStart(){
+  try{
+    _musicInit();
+    if(_mctx.state==='suspended')_mctx.resume();
+    if(_mplaying)return;
+    _mplaying=true;
+    _mDanger=false;
+    _gSoft.gain.cancelScheduledValues(_mctx.currentTime);
+    _gFull.gain.cancelScheduledValues(_mctx.currentTime);
+    _gSoft.gain.setValueAtTime(1,_mctx.currentTime);
+    _gFull.gain.setValueAtTime(0.0001,_mctx.currentTime);
+    _musicTick();
+  }catch(e){console.warn('music error',e);}
+}
+
+function musicStop(){
+  try{
+    _mplaying=false;
+    _mDanger=false;
+    clearTimeout(_mLoopTO);
+    if(_mctx){
+      const t=_mctx.currentTime;
+      _mmaster.gain.linearRampToValueAtTime(0.0001,t+0.8);
+      setTimeout(()=>{ _mmaster.gain.setValueAtTime(0.25,_mctx.currentTime); },900);
+    }
+  }catch(e){}
+}
+
+function musicSetDanger(danger){
+  try{
+    if(!_mctx||!_mplaying)return;
+    if(danger===_mDanger)return;
+    _mDanger=danger;
+    const t=_mctx.currentTime;
+    const FADE=3.0; // 3 second smooth crossfade
+    if(danger){
+      // soft → full: gradual over 3s with slight curve
+      _gSoft.gain.cancelScheduledValues(t);
+      _gFull.gain.cancelScheduledValues(t);
+      // use multiple intermediate points for smoother curve
+      _gSoft.gain.setValueAtTime(_gSoft.gain.value,t);
+      _gSoft.gain.linearRampToValueAtTime(0.6,t+FADE*0.3);
+      _gSoft.gain.linearRampToValueAtTime(0.2,t+FADE*0.6);
+      _gSoft.gain.linearRampToValueAtTime(0.0001,t+FADE);
+      _gFull.gain.setValueAtTime(_gFull.gain.value,t);
+      _gFull.gain.linearRampToValueAtTime(0.3,t+FADE*0.3);
+      _gFull.gain.linearRampToValueAtTime(0.7,t+FADE*0.6);
+      _gFull.gain.linearRampToValueAtTime(1.0,t+FADE);
+    } else {
+      // full → soft: same smooth curve back
+      _gFull.gain.cancelScheduledValues(t);
+      _gSoft.gain.cancelScheduledValues(t);
+      _gFull.gain.setValueAtTime(_gFull.gain.value,t);
+      _gFull.gain.linearRampToValueAtTime(0.7,t+FADE*0.3);
+      _gFull.gain.linearRampToValueAtTime(0.3,t+FADE*0.6);
+      _gFull.gain.linearRampToValueAtTime(0.0001,t+FADE);
+      _gSoft.gain.setValueAtTime(_gSoft.gain.value,t);
+      _gSoft.gain.linearRampToValueAtTime(0.3,t+FADE*0.3);
+      _gSoft.gain.linearRampToValueAtTime(0.7,t+FADE*0.6);
+      _gSoft.gain.linearRampToValueAtTime(1.0,t+FADE);
+    }
+  }catch(e){}
+}
+// ── END MUSIC ENGINE ──────────────────────────────────────────────────────────
+
+// ── AUDIO ENGINE ─────────────────────────────────────────────────────────────
+let _ctx=null,_master=null;
+
+function _initAudio(){
+  if(_ctx)return;
+  _ctx=new(window.AudioContext||window.webkitAudioContext)();
+  _master=_ctx.createGain();
+  _master.gain.value=0.75;
+  _master.connect(_ctx.destination);
+}
+
+function _rev(dur,decay){
+  const len=Math.ceil(_ctx.sampleRate*dur);
+  const buf=_ctx.createBuffer(2,len,_ctx.sampleRate);
+  for(let c=0;c<2;c++){const d=buf.getChannelData(c);for(let i=0;i<len;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/len,decay);}
+  const conv=_ctx.createConvolver();conv.buffer=buf;return conv;
+}
+
+function _env(g,t,attack,peak,decay){
+  g.gain.setValueAtTime(0.0001,t);
+  g.gain.linearRampToValueAtTime(peak,t+attack);
+  g.gain.setTargetAtTime(0.0001,t+attack,decay);
+}
+
+function _osc(type,freq,dest,t,attack,peak,decay){
+  const o=_ctx.createOscillator(),g=_ctx.createGain();
+  o.type=type;o.frequency.value=freq;
+  _env(g,t,attack,peak,decay);
+  o.connect(g);g.connect(dest);o.start(t);o.stop(t+attack+decay*6);
+}
+
+function _slide(type,f0,f1,dest,t,dur,peak){
+  const o=_ctx.createOscillator(),g=_ctx.createGain();
+  o.type=type;
+  o.frequency.setValueAtTime(f0,t);
+  o.frequency.exponentialRampToValueAtTime(Math.max(f1,1),t+dur);
+  _env(g,t,0.02,peak,dur*0.5);
+  o.connect(g);g.connect(dest);o.start(t);o.stop(t+dur+0.2);
+}
+
+function _noise(dest,t,dur,peak,hp=2000){
+  const len=Math.ceil(_ctx.sampleRate*dur);
+  const buf=_ctx.createBuffer(1,len,_ctx.sampleRate);
+  const d=buf.getChannelData(0);for(let i=0;i<len;i++)d[i]=Math.random()*2-1;
+  const src=_ctx.createBufferSource();src.buffer=buf;
+  const g=_ctx.createGain(),f=_ctx.createBiquadFilter();
+  f.type='highpass';f.frequency.value=hp;
+  g.gain.setValueAtTime(peak,t);g.gain.setTargetAtTime(0.0001,t,dur*0.15);
+  src.connect(f);f.connect(g);g.connect(dest);
+  src.start(t);src.stop(t+dur+0.05);
+}
+
+function _bell(dest,t,freq,peak,decay){
+  [{m:1.0,g:peak,d:decay},{m:2.76,g:peak*.5,d:decay*.5},{m:5.4,g:peak*.2,d:decay*.3}].forEach(p=>{
+    const o=_ctx.createOscillator(),g=_ctx.createGain();
+    o.type='sine';o.frequency.value=freq*p.m;
+    g.gain.setValueAtTime(0.0001,t);
+    g.gain.linearRampToValueAtTime(p.g,t+0.002);
+    g.gain.setTargetAtTime(0.0001,t+0.003,p.d);
+    o.connect(g);g.connect(dest);o.start(t);o.stop(t+decay*5+0.1);
+  });
+}
+
+function playSound(name){
+  try{
+    _initAudio();
+    if(_ctx.state==='suspended')_ctx.resume();
+    const t=_ctx.currentTime;
+    const SFX={
+      stupefy(){
+        const r=_rev(0.8,3);r.connect(_master);
+        _slide('sawtooth',200,1800,r,t,0.15,0.4);
+        _slide('square',150,900,r,t,0.2,0.3);
+        _noise(r,t+0.05,0.12,0.3);
+      },
+      expelliarmus(){
+        const r=_rev(1.0,2.5);r.connect(_master);
+        _slide('sine',1200,300,r,t,0.35,0.5);
+        _slide('triangle',800,200,r,t+0.05,0.4,0.3);
+        _noise(r,t,0.08,0.2);
+      },
+      avada(){
+        const r=_rev(2.0,1.5);r.connect(_master);
+        _slide('sawtooth',80,40,r,t,0.8,0.6);
+        _slide('sawtooth',160,80,r,t,0.8,0.4);
+        _slide('sine',1600,400,r,t+0.1,0.6,0.3);
+        _noise(r,t+0.05,0.4,0.25);
+      },
+      crucio(){
+        const r=_rev(1.2,2);r.connect(_master);
+        _slide('sawtooth',440,380,r,t,0.5,0.4);
+        _slide('sawtooth',453,390,r,t,0.5,0.35);
+        _slide('square',220,180,r,t+0.1,0.6,0.3);
+      },
+      protego(){
+        const r=_rev(1.5,2);r.connect(_master);
+        [523,659,784,1047].forEach((f,i)=>_osc('sine',f,r,t+i*0.04,0.01,0.35,0.4));
+      },
+      counter(){
+        const r=_rev(1.2,2.5);r.connect(_master);
+        [523,784].forEach((f,i)=>_osc('sine',f,r,t+i*0.03,0.01,0.4,0.3));
+        setTimeout(()=>{
+          const t2=_ctx.currentTime;
+          _slide('sawtooth',400,1200,r,t2,0.2,0.5);
+          _noise(r,t2,0.08,0.25);
+        },200);
+      },
+      lumos(){
+        const r=_rev(2.0,2);r.connect(_master);
+        [261,329,392,523,659].forEach((f,i)=>_osc('sine',f,r,t+i*0.06,0.02,0.28-i*0.02,0.6));
+        _slide('triangle',500,1000,r,t,0.8,0.2);
+      },
+      aguamenti(){
+        const r=_rev(1.5,2);r.connect(_master);
+        [261,329,392,523].forEach((f,i)=>_osc('sine',f,r,t+i*0.06,0.02,0.28,0.5));
+        _noise(r,t,0.3,0.15,500);
+      },
+      confundo(){
+        const r=_rev(1.2,2);r.connect(_master);
+        _slide('sawtooth',300,600,r,t,0.3,0.3);
+        _slide('sawtooth',310,580,r,t,0.3,0.25);
+        _osc('sine',150,r,t,0.05,0.3,0.4);
+      },
+      sectum(){
+        const r=_rev(0.8,3);r.connect(_master);
+        _slide('sawtooth',800,200,r,t,0.25,0.5);
+        _noise(r,t,0.2,0.4,1500);
+      },
+      hit(){
+        const r=_rev(0.5,3);r.connect(_master);
+        _slide('sine',120,40,r,t,0.25,0.7);
+        _noise(r,t,0.06,0.4,500);
+      },
+      shield_hit(){
+        const r=_rev(0.8,2.5);r.connect(_master);
+        [523,659,784].forEach((f,i)=>_osc('sine',f,r,t+i*0.03,0.01,0.4,0.35));
+        _noise(r,t,0.04,0.2,3000);
+      },
+      timeout(){
+        const r=_rev(0.6,3);r.connect(_master);
+        _bell(r,t,440,0.9,0.12);
+        _noise(r,t,0.015,0.3,2000);
+      },
+      victory(){
+        const r=_rev(2.0,1.5);r.connect(_master);
+        const notes=[523,659,784,1047,784,1047,1319];
+        const times=[0,0.12,0.24,0.36,0.52,0.60,0.72];
+        notes.forEach((f,i)=>{
+          _osc('triangle',f,r,t+times[i],0.01,0.5,0.18);
+          _osc('sine',f*2,r,t+times[i],0.01,0.15,0.15);
+        });
+      },
+      defeat(){
+        const r=_rev(2.5,1.2);r.connect(_master);
+        [392,349,311,261,233,196].forEach((f,i)=>{
+          _osc('sawtooth',f,r,t+i*0.18,0.02,0.4,0.3);
+          _osc('sine',f*0.5,r,t+i*0.18,0.02,0.2,0.4);
+        });
+      },
+      levelup(){
+        const r=_rev(2.0,1.8);r.connect(_master);
+        [261,329,392,523,659,784,1047,1319].forEach((f,i)=>{
+          _osc('sine',f,r,t+i*0.07,0.01,0.4,0.3);
+          _osc('triangle',f*2,r,t+i*0.07,0.01,0.15,0.2);
+        });
+      },
+    };
+    if(SFX[name])SFX[name]();
+  }catch(e){console.warn('audio error',e);}
+}
+// ── END AUDIO ENGINE ──────────────────────────────────────────────────────────
+
 function isVoice(){return !!(window.SpeechRecognition||window.webkitSpeechRecognition);}
 </script>
 </body>
