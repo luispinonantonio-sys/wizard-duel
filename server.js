@@ -187,18 +187,19 @@ const PATH_MULTS = {
   trickster:  { dmg: 1.1, heal: 1.0 },
 };
 const SPELLS = {
-  // básicos — clic y voz
-  aturdir:   { dmg: 25, heal: 0 },
-  expulsar:  { dmg: 20, heal: 0 },
-  sanar:     { dmg: 0,  heal: 20 },
-  escudo:    { dmg: 0,  heal: 0,  shield: true },
-  // poderosos — solo voz
-  destruir:  { dmg: 45, heal: 0 },
-  quemar:    { dmg: 35, heal: 0 },
-  restaurar: { dmg: 0,  heal: 30 },
-  confundir: { dmg: 15, heal: 0,  stun: true },
-  desgarrar: { dmg: 40, heal: 0 },
+  aturdir:   { dmg: 25, heal: 0,  cost: 25, power: 1 },
+  expulsar:  { dmg: 20, heal: 0,  cost: 20, power: 1 },
+  sanar:     { dmg: 0,  heal: 20, cost: 25, power: 0 },
+  escudo:    { dmg: 0,  heal: 0,  cost: 30, power: 0, shield: true },
+  destruir:  { dmg: 45, heal: 0,  cost: 50, power: 2 },
+  quemar:    { dmg: 35, heal: 0,  cost: 40, power: 2 },
+  restaurar: { dmg: 0,  heal: 30, cost: 35, power: 0 },
+  confundir: { dmg: 15, heal: 0,  cost: 25, power: 1, stun: true },
+  desgarrar: { dmg: 40, heal: 0,  cost: 45, power: 2 },
 };
+
+const MAX_ENERGY = 100;
+const ENERGY_REGEN = 12; // per second
 const CAST_SECS = 4; // fixed time to choose a spell each turn
 
 const COUNTER_PHRASES = [
@@ -242,50 +243,59 @@ function shuffle(arr) {
 function makeRoomState() {
   return {
     players: [
-      { hp:100, shield:false, stun:false, path:null, username:null,
-        countersOk:0, countersFail:0, combos:0, reactionTimes:[], spellCastAt:0 },
-      { hp:100, shield:false, stun:false, path:null, username:null,
-        countersOk:0, countersFail:0, combos:0, reactionTimes:[], spellCastAt:0 },
+      { hp:100, energy:MAX_ENERGY, shield:false, stun:false, path:null, username:null,
+        countersOk:0, countersFail:0, combos:0, reactionTimes:[], choice:null, choiceTime:0 },
+      { hp:100, energy:MAX_ENERGY, shield:false, stun:false, path:null, username:null,
+        countersOk:0, countersFail:0, combos:0, reactionTimes:[], choice:null, choiceTime:0 },
     ],
-    turn: 0,
-    phase: 'battle',
-    counterFor: null, counterDmg: 0, counterPhrase: '', counterDeadline: 0,
-    castDeadline: 0,
+    phase: 'simultaneous', // simultaneous | resolving | gameover
+    roundDeadline: 0,
+    roundTimeout: null,
+    energyInterval: null,
   };
 }
 
-// Emit turn_change with a fresh shuffled spell order and cast deadline
-function emitTurnChange(code, room, io) {
-  if (!rooms[code]) return; // room may have been deleted
-  const pi = room.state.turn;
-  if (!room.sockets[pi]) return; // player offline, skip until reconnect
-  const playerPath = room.state.players[pi].path;
+const ROUND_SECS = 4;
+
+function startRound(code, room, io) {
+  if (!rooms[code] || room.state.phase === 'gameover') return;
+
+  // clear previous choices
+  room.state.players[0].choice = null;
+  room.state.players[1].choice = null;
+  room.state.phase = 'simultaneous';
+
+  // shuffle spell orders per player
   const PATH_SPELLS = {
     destructor: ['aturdir','destruir','expulsar','quemar'],
     guardian:   ['escudo','sanar','expulsar','restaurar'],
     trickster:  ['confundir','expulsar','aturdir','desgarrar'],
   };
-  const spells = PATH_SPELLS[playerPath] || PATH_SPELLS.destructor;
-  const spellOrder = shuffle(spells);
-  const deadline = Date.now() + CAST_SECS * 1000;
-  room.state.castDeadline = deadline;
+  const order0 = shuffle(PATH_SPELLS[room.state.players[0].path] || PATH_SPELLS.destructor);
+  const order1 = shuffle(PATH_SPELLS[room.state.players[1].path] || PATH_SPELLS.destructor);
 
-  io.to(code).emit('turn_change', {
-    turn: pi,
-    spellOrder,       // shuffled order for the attacker to see
-    castSecs: CAST_SECS,
-    castDeadline: deadline,
+  const deadline = Date.now() + ROUND_SECS * 1000;
+  room.state.roundDeadline = deadline;
+
+  // send round_start to each player with their own spell order
+  if (room.sockets[0]) room.sockets[0].emit('round_start', {
+    spellOrder: order0, secs: ROUND_SECS, deadline,
+    myEnergy: room.state.players[0].energy,
+    oppEnergy: room.state.players[1].energy,
+  });
+  if (room.sockets[1]) room.sockets[1].emit('round_start', {
+    spellOrder: order1, secs: ROUND_SECS, deadline,
+    myEnergy: room.state.players[1].energy,
+    oppEnergy: room.state.players[0].energy,
   });
 
-  // Auto-skip if attacker doesn't cast in time
-  setTimeout(() => {
-    if (room.state.phase === 'battle' && room.state.turn === pi && room.state.castDeadline === deadline) {
-      const ti = pi === 0 ? 1 : 0;
-      room.state.turn = ti;
-      io.to(code).emit('turn_skipped', { skipped: pi });
-      emitTurnChange(code, room, io);
+  // auto-resolve when time runs out
+  clearTimeout(room.state.roundTimeout);
+  room.state.roundTimeout = setTimeout(() => {
+    if (rooms[code] && room.state.phase === 'simultaneous') {
+      resolveRound(code, room, io);
     }
-  }, (CAST_SECS + 0.5) * 1000);
+  }, (ROUND_SECS + 0.5) * 1000);
 }
 
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
@@ -471,8 +481,8 @@ io.on('connection', socket => {
     socket.roomCode = code.toUpperCase();
     socket.playerIndex = 1;
 
-    // Kick off first turn timer
-    emitTurnChange(code, room, io);
+    // Kick off first simultaneous round
+    setTimeout(() => startRound(code, room, io), 500);
 
     // Send each player their own index + opponent info
     // Guard against null sockets (player may have briefly disconnected while waiting)
@@ -509,81 +519,26 @@ io.on('connection', socket => {
     }
   });
 
-  // ─── COMBAT ───────────────────────────────────────────────────────────────
-  socket.on('cast_spell', ({ spell }) => {
+  // ─── SIMULTANEOUS COMBAT ─────────────────────────────────────────────────
+  socket.on('choose_spell', ({ spell }) => {
     const code = socket.roomCode;
     const room = rooms[code];
-    if (!room || room.state.phase !== 'battle') return;
+    if (!room || room.state.phase !== 'simultaneous') return;
     const pi = socket.playerIndex;
-    const ti = pi === 0 ? 1 : 0;
-    if (room.state.turn !== pi) { socket.emit('not_your_turn'); return; }
-
     const s = SPELLS[spell];
     if (!s) return;
-    const mults = PATH_MULTS[room.state.players[pi].path] || { dmg:1, heal:1 };
-
-    // Record cast time for reaction tracking
-    room.state.players[pi].spellCastAt = Date.now();
-
-    if (s.shield) {
-      room.state.players[pi].shield = true;
-      io.to(code).emit('spell_result', { caster:pi, spell, effect:'shield' });
-      room.state.turn = ti;
-      emitTurnChange(code, room, io);
+    if (room.state.players[pi].energy < s.cost) {
+      socket.emit('no_energy', { needed: s.cost, have: room.state.players[pi].energy });
       return;
     }
-    if (s.stun) {
-      let dmg = Math.round(s.dmg * mults.dmg);
-      if (room.state.players[ti].shield) { dmg = Math.floor(dmg*.5); room.state.players[ti].shield = false; }
-      room.state.players[ti].hp = Math.max(0, room.state.players[ti].hp - dmg);
-      room.state.players[ti].stun = true;
-      io.to(code).emit('spell_result', { caster:pi, spell, effect:'stun', dmg });
-      checkWin(code, room); if (room.state.phase !== 'gameover') { room.state.turn = ti; emitTurnChange(code, room, io); }
-      return;
+    room.state.players[pi].choice = spell;
+    room.state.players[pi].choiceTime = Date.now();
+    socket.emit('choice_confirmed', { spell });
+    // if both chose resolve immediately
+    if (room.state.players[0].choice && room.state.players[1].choice) {
+      clearTimeout(room.state.roundTimeout);
+      setTimeout(() => resolveRound(code, room, io), 300);
     }
-    if (s.heal > 0) {
-      const h = Math.round(s.heal * mults.heal);
-      room.state.players[pi].hp = Math.min(100, room.state.players[pi].hp + h);
-      io.to(code).emit('spell_result', { caster:pi, spell, effect:'heal', heal:h });
-      room.state.turn = ti; emitTurnChange(code, room, io);
-      return;
-    }
-    if (s.dmg > 0) {
-      const rawDmg = Math.round(s.dmg * mults.dmg);
-      const targetUsername = room.state.players[ti].username;
-      const targetRow = stmts.findUser(targetUsername);
-      const targetProfile = targetRow ? rowToProfile(targetRow) : null;
-      const targetLevel = targetProfile ? calcLevel(targetProfile.xp) : LEVELS[0];
-      const secs = targetLevel.counterSecs;
-      const phrase = COUNTER_PHRASES[Math.floor(Math.random()*COUNTER_PHRASES.length)];
-      const keywords = COUNTER_KEYWORDS[phrase] || [phrase.replace(/[¡!]/g,'').toLowerCase()];
-
-      room.state.phase = 'counter';
-      room.state.counterFor = ti;
-      room.state.counterDmg = rawDmg;
-      room.state.counterPhrase = phrase;
-      room.state.counterDeadline = Date.now() + secs*1000;
-
-      io.to(code).emit('spell_result', { caster:pi, spell, effect:'attack', rawDmg });
-      room.sockets[ti].emit('counter_challenge', { phrase, keywords, secs, rawDmg });
-      room.sockets[pi].emit('counter_pending', { secs });
-
-      setTimeout(() => {
-        if (room.state.phase === 'counter') resolveCounter(code, room, false);
-      }, (secs + 1.5) * 1000);
-    }
-  });
-
-  socket.on('counter_attempt', ({ success, reactionMs }) => {
-    const code = socket.roomCode;
-    const room = rooms[code];
-    if (!room || room.state.phase !== 'counter') return;
-    if (socket.playerIndex !== room.state.counterFor) return;
-    // Record reaction time
-    if (reactionMs && reactionMs > 0) {
-      room.state.players[socket.playerIndex].reactionTimes.push(reactionMs);
-    }
-    resolveCounter(code, room, success);
   });
 
   socket.on('disconnect', () => {
@@ -644,11 +599,101 @@ function resolveCounter(code, room, success) {
   checkWin(code, room);
   if (room.state.phase !== 'gameover') {
     room.state.turn = ti;
-    emitTurnChange(code, room, io);
+    startRound(code, room, io);
   }
 }
 
 // ─── WIN / XP RESOLUTION ──────────────────────────────────────────────────────
+function resolveRound(code, room, io) {
+  if (!rooms[code] || room.state.phase === 'gameover') return;
+  room.state.phase = 'resolving';
+
+  const p0 = room.state.players[0], p1 = room.state.players[1];
+  const c0 = p0.choice, c1 = p1.choice;
+  const s0 = c0 ? SPELLS[c0] : null;
+  const s1 = c1 ? SPELLS[c1] : null;
+  const m0 = PATH_MULTS[p0.path] || { dmg:1, heal:1 };
+  const m1 = PATH_MULTS[p1.path] || { dmg:1, heal:1 };
+
+  // deduct energy
+  if (s0) p0.energy = Math.max(0, p0.energy - s0.cost);
+  if (s1) p1.energy = Math.max(0, p1.energy - s1.cost);
+
+  let result = { type:'none', p0dmg:0, p1dmg:0, p0heal:0, p1heal:0, clash:false };
+
+  if (!s0 && !s1) {
+    result.type = 'both_idle';
+  } else if (s0?.shield && s1?.shield) {
+    result.type = 'both_shield';
+  } else if (s0?.shield && s1?.dmg > 0) {
+    result.type = 'p0_blocked';
+  } else if (s1?.shield && s0?.dmg > 0) {
+    result.type = 'p1_blocked';
+  } else if (s0?.dmg > 0 && s1?.dmg > 0) {
+    // CLASH
+    result.clash = true;
+    const pow0 = s0.power || 1, pow1 = s1.power || 1;
+    const d0 = Math.round(s0.dmg * m0.dmg), d1 = Math.round(s1.dmg * m1.dmg);
+    if (pow0 > pow1) {
+      result.type = 'p0_wins_clash';
+      result.p1dmg = d0 - Math.floor(d1 * 0.5);
+    } else if (pow1 > pow0) {
+      result.type = 'p1_wins_clash';
+      result.p0dmg = d1 - Math.floor(d0 * 0.5);
+    } else {
+      result.type = 'equal_clash';
+      result.p0dmg = Math.floor(d1 * 0.4);
+      result.p1dmg = Math.floor(d0 * 0.4);
+    }
+  } else if (s0?.dmg > 0 && !s1) {
+    result.type = 'p0_hits';
+    result.p1dmg = Math.round(s0.dmg * m0.dmg);
+    if (s0.stun) p1.stun = true;
+  } else if (s1?.dmg > 0 && !s0) {
+    result.type = 'p1_hits';
+    result.p0dmg = Math.round(s1.dmg * m1.dmg);
+    if (s1.stun) p0.stun = true;
+  } else if (s0?.heal > 0) {
+    result.type = 'p0_heals';
+    result.p0heal = Math.round(s0.heal * m0.heal);
+  } else if (s1?.heal > 0) {
+    result.type = 'p1_heals';
+    result.p1heal = Math.round(s1.heal * m1.heal);
+  }
+
+  // apply damage and healing
+  p0.hp = Math.max(0, Math.min(100, p0.hp - result.p0dmg + result.p0heal));
+  p1.hp = Math.max(0, Math.min(100, p1.hp - result.p1dmg + result.p1heal));
+
+  // start energy regen
+  let regenTicks = 0;
+  const regenInterval = setInterval(() => {
+    if (!rooms[code]) { clearInterval(regenInterval); return; }
+    regenTicks++;
+    p0.energy = Math.min(MAX_ENERGY, p0.energy + ENERGY_REGEN * 0.1);
+    p1.energy = Math.min(MAX_ENERGY, p1.energy + ENERGY_REGEN * 0.1);
+    io.to(code).emit('energy_update', {
+      p0: Math.round(p0.energy), p1: Math.round(p1.energy)
+    });
+    if (regenTicks >= 20) clearInterval(regenInterval); // 2 seconds of regen
+  }, 100);
+
+  // emit result to both players
+  io.to(code).emit('round_result', {
+    result,
+    spell0: c0, spell1: c1,
+    p0hp: p0.hp, p1hp: p1.hp,
+    p0energy: Math.round(p0.energy), p1energy: Math.round(p1.energy),
+  });
+
+  checkWin(code, room);
+  if (room.state.phase !== 'gameover') {
+    setTimeout(() => {
+      if (rooms[code]) startRound(code, room, io);
+    }, 2200);
+  }
+}
+
 function deleteRoom(code) {
   delete rooms[code];
   for (const [u, c] of Object.entries(roomByUser)) {
