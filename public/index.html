@@ -247,8 +247,7 @@ input.code-inp:focus{border-color:#60a5fa}
   min-height:70px;display:flex;flex-direction:column;align-items:center;justify-content:center;
 }
 .sc:active,.sc.act{background:rgba(232,200,122,.15);border-color:var(--gold);transform:scale(.95)}
-.sc.voice-only{border-color:rgba(168,85,247,.4);background:rgba(168,85,247,.06)}
-.sc.voice-only:active{background:rgba(168,85,247,.15)}
+.sc.nrg-low{opacity:.35;pointer-events:none}
 @keyframes shake{0%{transform:translateX(0)}20%{transform:translateX(-6px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(4px)}100%{transform:translateX(0)}}
 .sc.disabled{opacity:.3;pointer-events:none}
 .sc.secret{border-color:rgba(255,100,200,.4);background:rgba(255,100,200,.06)}
@@ -413,6 +412,29 @@ input.code-inp:focus{border-color:#60a5fa}
     <div style="font-size:11px;color:rgba(200,180,255,.35);font-style:italic;margin-top:2px">Cuando el rival ataque, aparece aquí</div>
   </div>
 
+  <!-- energy bars -->
+  <div style="display:flex;justify-content:space-between;gap:8px;padding:0 14px 4px;flex-shrink:0">
+    <div style="flex:1">
+      <div style="display:flex;justify-content:space-between;margin-bottom:2px">
+        <div style="font-family:'Cinzel',serif;color:#a855f7;font-size:9px;letter-spacing:1px">⚡ ENERGÍA</div>
+        <div style="font-family:'Cinzel',serif;color:#a855f7;font-size:9px" id="p-eval">100</div>
+      </div>
+      <div style="height:5px;background:rgba(255,255,255,.1);border-radius:3px;overflow:hidden">
+        <div id="p-ebar" style="height:100%;border-radius:3px;background:linear-gradient(90deg,#7c3aed,#a855f7);transition:width .3s ease;width:100%"></div>
+      </div>
+    </div>
+    <div style="width:20px"></div>
+    <div style="flex:1;text-align:right">
+      <div style="display:flex;justify-content:space-between;margin-bottom:2px">
+        <div style="font-family:'Cinzel',serif;color:#a855f7;font-size:9px" id="e-eval">100</div>
+        <div style="font-family:'Cinzel',serif;color:#a855f7;font-size:9px;letter-spacing:1px">ENERGÍA ⚡</div>
+      </div>
+      <div style="height:5px;background:rgba(255,255,255,.1);border-radius:3px;overflow:hidden">
+        <div id="e-ebar" style="height:100%;border-radius:3px;background:linear-gradient(90deg,#7c3aed,#a855f7);transition:width .3s ease;width:100%"></div>
+      </div>
+    </div>
+  </div>
+
   <!-- cast timer -->
   <div style="padding:4px 12px 2px;flex-shrink:0" id="cast-timer-wrap" style="display:none">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
@@ -457,18 +479,17 @@ const PATHS={
   },
 };
 const SPELLS={
-  // ── BÁSICOS — disponibles con clic y voz ──────────────────────────────────
-  aturdir:   {name:'Aturdir',   icon:'⚡',dmg:25,heal:0,   kw:['aturdir','aturde','aturdece']},
-  expulsar:  {name:'Expulsar',  icon:'💥',dmg:20,heal:0,   kw:['expulsar','expulsa','expulso']},
-  sanar:     {name:'Sanar',     icon:'🌟',dmg:0, heal:20,  kw:['sanar','sana','cura','curar']},
-  escudo:    {name:'Escudo',    icon:'🛡️',dmg:0, heal:0,shield:true, kw:['escudo','proteger','protege']},
-  // ── PODEROSOS — solo voz ──────────────────────────────────────────────────
-  destruir:  {name:'Destruir',  icon:'💀',dmg:45,heal:0,   kw:['destruir','destruye','destrucción'],voiceOnly:true},
-  quemar:    {name:'Quemar',    icon:'🔥',dmg:35,heal:0,   kw:['quemar','quema','fuego'],voiceOnly:true},
-  restaurar: {name:'Restaurar', icon:'💧',dmg:0, heal:30,  kw:['restaurar','restaura','restauro'],voiceOnly:true},
-  confundir: {name:'Confundir', icon:'🌀',dmg:15,heal:0,stun:true, kw:['confundir','confunde','confundo'],voiceOnly:true},
-  desgarrar: {name:'Desgarrar', icon:'🗡️',dmg:40,heal:0,   kw:['desgarrar','desgarra','desgarro'],voiceOnly:true,secret:true},
+  aturdir:   {name:'Aturdir',   icon:'⚡',dmg:25,heal:0,  cost:25,power:1,kw:['aturdir','aturde','aturdece']},
+  expulsar:  {name:'Expulsar',  icon:'💥',dmg:20,heal:0,  cost:20,power:1,kw:['expulsar','expulsa','expulso']},
+  sanar:     {name:'Sanar',     icon:'🌟',dmg:0, heal:20, cost:25,power:0,kw:['sanar','sana','cura','curar']},
+  escudo:    {name:'Escudo',    icon:'🛡️',dmg:0, heal:0,  cost:30,power:0,shield:true,kw:['escudo','proteger','protege']},
+  destruir:  {name:'Destruir',  icon:'💀',dmg:45,heal:0,  cost:50,power:2,kw:['destruir','destruye','destrucción']},
+  quemar:    {name:'Quemar',    icon:'🔥',dmg:35,heal:0,  cost:40,power:2,kw:['quemar','quema','fuego']},
+  restaurar: {name:'Restaurar', icon:'💧',dmg:0, heal:30, cost:35,power:0,kw:['restaurar','restaura','restauro']},
+  confundir: {name:'Confundir', icon:'🌀',dmg:15,heal:0,  cost:25,power:1,stun:true,kw:['confundir','confunde','confundo']},
+  desgarrar: {name:'Desgarrar', icon:'🗡️',dmg:40,heal:0,  cost:45,power:2,secret:true,kw:['desgarrar','desgarra','desgarro']},
 };
+const MAX_ENERGY=100;
 const LEVEL_META=[
   {n:1,name:'Novato',   color:'#4ade80',icon:'🌱'},
   {n:2,name:'Aprendiz', color:'#a3e635',icon:'🌿'},
@@ -494,8 +515,9 @@ const XP_THRESHOLDS=[0,100,300,700,1500];
 
 let G={
   profile:null,selectedPath:null,selectedAvatar:'🧙',
+  myEnergy:100,oppEnergy:100,
   myIndex:null,myHP:100,oppHP:100,
-  myTurn:false,counterActive:false,
+  myTurn:false,counterActive:false,roundActive:false,myChose:false,
   listening:false,recognition:null,atkRec:null,
   counterInterval:null,counterStartTs:0,castInterval:null,
 };
@@ -713,8 +735,8 @@ socket.on('error',({msg})=>setLobbyMsg(msg,'err'));
 
 // ── DUEL START ────────────────────────────────────────────────────────────────
 socket.on('duel_start',({yourIndex,yourLevel,oppLevel,oppName,oppAvatar})=>{
-  G.myIndex=yourIndex; G.myHP=100; G.oppHP=100; G.myTurn=yourIndex===0;
-  updateBars(); // reset HP bars visually
+  G.myIndex=yourIndex; G.myHP=100; G.oppHP=100; G.myEnergy=100; G.oppEnergy=100; G.myTurn=yourIndex===0;
+  updateBars(); updateEnergyBars(); // reset bars visually
   resetCounterPanel(); // reset counter panel
   document.getElementById('lobby-screen').style.display='none';
   const gameEl=document.getElementById('game');
@@ -752,21 +774,16 @@ socket.on('duel_start',({yourIndex,yourLevel,oppLevel,oppName,oppAvatar})=>{
 function renderSpells(){
   document.getElementById('sgrid').innerHTML=PATHS[G.selectedPath].spells.map(sk=>{
     const s=SPELLS[sk];
-    const isVoiceOnly=s.voiceOnly;
-    const isSecret=s.secret;
-    return `<div class="sc${isVoiceOnly?' voice-only':''}${isSecret?' secret':''}"
-      data-spell="${sk}"
-      onclick="clickSpell('${sk}')"
-      title="${isVoiceOnly?'Solo voz 🎤':'Clic o voz'}">
-      ${isSecret?'<div class="sbadge">OCULTO</div>':''}
-      ${isVoiceOnly?'<div class="sbadge" style="background:#a855f7">🎤</div>':''}
+    const canAfford=G.myEnergy>=s.cost;
+    return `<div class="sc${s.secret?' secret':''}${!canAfford?' nrg-low':''}"
+      data-spell="${sk}" onclick="clickSpell('${sk}')">
+      ${s.secret?'<div class="sbadge">OCULTO</div>':''}
       <div class="si">${s.icon}</div>
       <div class="sn">${s.name}</div>
-      ${s.dmg>0?`<div class="sdmg">-${s.dmg}</div>`:''}
-      ${s.heal>0?`<div class="sheal">+${s.heal}</div>`:''}
+      ${s.dmg>0?`<div class="sdmg">-${s.dmg}hp</div>`:''}
+      ${s.heal>0?`<div class="sheal">+${s.heal}hp</div>`:''}
       ${s.shield?'<div class="sheal">Escudo</div>':''}
-      ${s.stun?'<div class="sdmg">Aturde</div>':''}
-      ${isVoiceOnly?'<div style="font-size:8px;color:#a855f7;font-family:Cinzel,serif;margin-top:2px">SOLO VOZ</div>':''}
+      <div style="font-size:8px;color:#a855f7;font-family:Cinzel,serif;margin-top:2px">${s.cost}⚡</div>
     </div>`;
   }).join('');
 }
@@ -775,23 +792,26 @@ function setSpellsDisabled(d){
   document.getElementById('mbn').classList.toggle('disabled',d);
 }
 function clickSpell(sk){
-  if(!G.myTurn||G.counterActive)return;
+  if(!G.roundActive||G.myChose)return;
   const s=SPELLS[sk];
-  if(s && s.voiceOnly){
-    // shake the card to signal it needs voice
+  if(!s)return;
+  if(G.myEnergy<s.cost){
     const card=document.querySelector(`[data-spell="${sk}"]`);
-    if(card){
-      card.style.animation='shake .4s ease';
-      setTimeout(()=>card.style.animation='',500);
-    }
-    addLog('🎤 Este hechizo solo se activa con la voz','ms');
+    if(card){card.style.animation='shake .4s ease';setTimeout(()=>card.style.animation='',500);}
+    addLog(`⚡ Sin energía — necesitas ${s.cost}, tienes ${Math.round(G.myEnergy)}`,'ms');
     return;
   }
   playSound(spellSoundKey(sk));
-  socket.emit('cast_spell',{spell:sk});
+  socket.emit('choose_spell',{spell:sk});
+  G.myChose=true;
   document.getElementById('psp').classList.add('casting');
   setTimeout(()=>document.getElementById('psp').classList.remove('casting'),600);
-  setSpellsDisabled(true);
+  // dim other cards
+  document.querySelectorAll('.sc').forEach(c=>{
+    if(c.dataset.spell!==sk) c.style.opacity='.35';
+    else c.style.borderColor='#e8c87a';
+  });
+  document.getElementById('tind').textContent='⌛ Esperando al rival...';
 }
 
 // ── VOICE ─────────────────────────────────────────────────────────────────────
@@ -827,85 +847,106 @@ function processVoice(text){
 }
 
 // ── SOCKET EVENTS ─────────────────────────────────────────────────────────────
-socket.on('spell_result',({caster,spell,effect,dmg,heal})=>{
-  const s=SPELLS[spell];if(!s)return;
-  showSfx(s.icon);
-  const isMe=caster===G.myIndex;
-  if(effect==='attack'){
-    if(!isMe)playSound(spellSoundKey(spell));
-    playSound('hit');
-    document.getElementById(isMe?'esp':'psp').classList.add('hit');
-    setTimeout(()=>document.getElementById(isMe?'esp':'psp').classList.remove('hit'),500);
-    addLog(isMe?`${s.icon} ¡${s.name}! El rival puede contraatacar...`:`${s.icon} ¡${s.name}! ¡CONTRAATACA!`,isMe?'sc2':'dm');
-  }else if(effect==='shield'){
-    if(!isMe)playSound('protego');
-    addLog(isMe?'🛡️ ¡Protego! Escudo activo.':'⚔️ El rival activa Protego.','sc2');
-  }else if(effect==='heal'){
-    if(!isMe)playSound(spellSoundKey(spell));
-    if(isMe){G.myHP=Math.min(100,G.myHP+heal);addLog(`🌟 +${heal} HP`,'hl');}
-    else{G.oppHP=Math.min(100,G.oppHP+heal);addLog(`🌟 El rival se cura ${heal} HP`,'hl');}
-    updateBars();
-  }else if(effect==='stun'){
-    if(!isMe)playSound(spell);
-    if(!isMe){G.myHP=Math.max(0,G.myHP-dmg);document.getElementById('psp').classList.add('hit');setTimeout(()=>document.getElementById('psp').classList.remove('hit'),500);addLog(`🌀 ¡${s.name}! ${dmg} daño + aturdido`,'dm');playSound('hit');}
-    else{G.oppHP=Math.max(0,G.oppHP-dmg);document.getElementById('esp').classList.add('hit');setTimeout(()=>document.getElementById('esp').classList.remove('hit'),500);addLog(`🌀 ¡${s.name}! ${dmg} daño + rival aturdido`,'sc2');}
-    updateBars();
+socket.on('round_result',({result,spell0,spell1,p0hp,p1hp,p0energy,p1energy})=>{
+  clearInterval(G.castInterval); resetCastTimer();
+  stopListen();
+  G.roundActive=false; G.myChose=false;
+  document.querySelectorAll('.sc').forEach(c=>{c.style.opacity='';c.style.borderColor='';});
+  resetCounterPanel();
+
+  const mySpell=G.myIndex===0?spell0:spell1;
+  const oppSpell=G.myIndex===0?spell1:spell0;
+  G.myHP=G.myIndex===0?p0hp:p1hp;
+  G.oppHP=G.myIndex===0?p1hp:p0hp;
+  G.myEnergy=G.myIndex===0?p0energy:p1energy;
+  G.oppEnergy=G.myIndex===0?p1energy:p0energy;
+
+  const sm=mySpell?SPELLS[mySpell]:null;
+  const so=oppSpell?SPELLS[oppSpell]:null;
+  if(sm) showSfx(sm.icon);
+  if(so) setTimeout(()=>{ if(so.icon) showSfx(so.icon); },150);
+
+  const r=result.type;
+  const myDmg=G.myIndex===0?result.p0dmg:result.p1dmg;
+  const oppDmg=G.myIndex===0?result.p1dmg:result.p0dmg;
+
+  if(r==='both_idle'){
+    addLog('⏰ Los dos se quedaron quietos...','ms'); playSound('timeout');
+  } else if(r==='both_shield'){
+    addLog('🛡️ Los dos se protegieron — empate','ms'); playSound('protego');
+  } else if(r==='p0_blocked'||r==='p1_blocked'){
+    const iBlocked=(r==='p0_blocked'&&G.myIndex===0)||(r==='p1_blocked'&&G.myIndex===1);
+    if(iBlocked){ addLog('🛡️ ¡Bloqueaste el ataque!','ct'); playSound('counter'); flashScreen('gold'); }
+    else { addLog('🛡️ El rival bloqueó tu ataque','ms'); playSound('protego'); }
+  } else if(r.includes('clash')){
+    playSound('stupefy'); playSound('hit');
+    if(r==='equal_clash'){
+      if(myDmg>0) dramaticHit('psp',myDmg,true);
+      if(oppDmg>0) dramaticHit('esp',oppDmg,false);
+      addLog('💥 ¡CHOQUE IGUALADO! Los dos reciben daño reducido','sc2');
+    } else {
+      const myWon=(r==='p0_wins_clash'&&G.myIndex===0)||(r==='p1_wins_clash'&&G.myIndex===1);
+      if(myWon){ if(oppDmg>0) dramaticHit('esp',oppDmg,false); addLog(`💥 ¡CHOQUE! Tu ${sm?.icon||''} venció — ${oppDmg} daño`,'sc2'); }
+      else { if(myDmg>0) dramaticHit('psp',myDmg,true); addLog(`💥 ¡CHOQUE! ${so?.icon||''} del rival venció — ${myDmg} daño`,'dm'); }
+    }
+  } else if(r==='p0_hits'||r==='p1_hits'){
+    const iHit=(r==='p0_hits'&&G.myIndex===0)||(r==='p1_hits'&&G.myIndex===1);
+    if(iHit){
+      if(oppDmg>0) dramaticHit('psp',oppDmg,true);
+      if(so) playSound(spellSoundKey(oppSpell)); playSound('hit');
+      addLog(`${so?.icon||'⚡'} El rival usó ${so?.name||''} — ${oppDmg} daño`,'dm');
+    } else {
+      if(myDmg>0) dramaticHit('esp',myDmg,false);
+      if(sm) playSound(spellSoundKey(mySpell)); playSound('hit');
+      addLog(`${sm?.icon||'⚡'} ¡${sm?.name||''}! ${myDmg} daño al rival`,'sc2');
+    }
+  } else if(r==='p0_heals'||r==='p1_heals'){
+    const iHeal=(r==='p0_heals'&&G.myIndex===0)||(r==='p1_heals'&&G.myIndex===1);
+    playSound('lumos');
+    const h=result.p0heal||result.p1heal;
+    if(iHeal) addLog(`🌟 +${h} HP recuperados`,'hl');
+    else addLog(`🌟 El rival se curó ${h} HP`,'ms');
   }
+
+  updateBars(); updateEnergyBars(); renderSpells();
+  document.getElementById('tind').textContent='⏳ Próxima ronda...';
+  document.getElementById('tind').className='tind';
 });
-socket.on('counter_challenge',({phrase,keywords,secs,rawDmg})=>{
-  playSound('shield_hit');
-  G.counterActive=true;G.counterStartTs=Date.now();
-  window._counterKW=keywords||null;
-  setSpellsDisabled(true);showCounterChallenge(phrase,secs,rawDmg);
-});
-socket.on('counter_pending',({secs})=>{
-  const p=document.getElementById('cpanel');p.className='cpanel waiting';
-  p.innerHTML=`<div class="cp-lbl waiting">⏳ EL RIVAL CONTRAATACA</div>
-    <div style="font-size:11px;color:rgba(255,160,50,.7);margin-top:3px;font-style:italic">Tiene ${secs}s...</div>`;
-});
-socket.on('counter_result',({success,rebound,dmg,defender})=>{
-  clearInterval(G.counterInterval);G.counterActive=false;
-  const iAm=defender===G.myIndex;
-  if(success){
-    playSound('counter');
-    showSfx('🛡️');
-    if(iAm){G.oppHP=Math.max(0,G.oppHP-rebound);addLog(`🛡️ ¡CONTRAATAQUE! ${rebound} daño de rebote`,'ct');}
-    else{G.myHP=Math.max(0,G.myHP-rebound);document.getElementById('psp').classList.add('hit');setTimeout(()=>document.getElementById('psp').classList.remove('hit'),500);addLog(`🛡️ El rival bloqueó — ${rebound} rebote`,'dm');playSound('hit');}
-    const p=document.getElementById('cpanel');p.className='cpanel success';
-    p.innerHTML=`<div class="cp-lbl success">✅ ${iAm?'¡Bloqueaste el ataque!':'El rival bloqueó'}</div>`;
-  }else{
-    playSound('hit');
-    if(iAm){G.myHP=Math.max(0,G.myHP-dmg);document.getElementById('psp').classList.add('hit');setTimeout(()=>document.getElementById('psp').classList.remove('hit'),500);addLog(`❌ Contraataque fallido. ${dmg} daño`,'dm');}
-    else{G.oppHP=Math.max(0,G.oppHP-dmg);document.getElementById('esp').classList.add('hit');setTimeout(()=>document.getElementById('esp').classList.remove('hit'),500);addLog(`⚔️ El rival falló. ${dmg} daño infligido`,'sc2');}
-    const p=document.getElementById('cpanel');p.className='cpanel fail';
-    p.innerHTML=`<div class="cp-lbl fail">❌ ${iAm?'Contraataque fallido':'El rival no bloqueó'}</div>`;
-  }
-  updateBars();
-  setTimeout(()=>resetCounterPanel(),1800);
-});
-socket.on('turn_skipped',({skipped})=>{
-  playSound('timeout');
-  clearInterval(G.castInterval);
-  resetCastTimer();
-  if(skipped===G.myIndex){
-    addLog('⏰ Tiempo agotado — perdiste el turno','dm');
-  } else {
-    addLog('⏰ El rival tardó demasiado — es tu turno','hl');
+
+socket.on('round_start',({spellOrder,secs,deadline,myEnergy,oppEnergy})=>{
+  G.roundActive=true; G.myChose=false;
+  G.myEnergy=myEnergy; G.oppEnergy=oppEnergy;
+  reshuffleSpells(spellOrder);
+  startCastTimer(secs,deadline);
+  updateEnergyBars();
+  renderSpells();
+  setSpellsDisabled(false);
+  updateTurn();
+  document.getElementById('tind').textContent='⚡ ¡ELIGE TU HECHIZO AHORA!';
+  document.getElementById('tind').className='tind mine';
+  // auto-activate mic
+  if(isVoice()){
+    setTimeout(()=>{ if(!G.listening&&G.roundActive&&!G.myChose) startListen(); },300);
   }
 });
 
-socket.on('turn_change',({turn,spellOrder,castSecs,castDeadline})=>{
-  if(spellOrder && turn===G.myIndex) reshuffleSpells(spellOrder);
-  if(castSecs && turn===G.myIndex) startCastTimer(castSecs, castDeadline);
-  else { clearInterval(G.castInterval); resetCastTimer(); }
-  G.myTurn=turn===G.myIndex;setSpellsDisabled(!G.myTurn);updateTurn();
-  // auto-activate mic when it's your turn
-  if(G.myTurn && !G.counterActive && isVoice()){
-    // small delay so cast timer renders first
-    setTimeout(()=>{
-      if(G.myTurn && !G.listening && !G.counterActive) startListen();
-    }, 400);
-  }
+socket.on('choice_confirmed',({spell})=>{
+  const s=SPELLS[spell];
+  if(s) addLog(`${s.icon} ¡${s.name}! Esperando al rival...`,'sc2');
+});
+
+socket.on('no_energy',({needed,have})=>{
+  addLog(`⚡ Sin energía — necesitas ${needed}, tienes ${have}`,'ms');
+  G.myChose=false;
+  document.querySelectorAll('.sc').forEach(c=>{c.style.opacity='';c.style.borderColor='';});
+});
+
+socket.on('energy_update',({p0,p1})=>{
+  const myE=G.myIndex===0?p0:p1;
+  const oppE=G.myIndex===0?p1:p0;
+  G.myEnergy=myE; G.oppEnergy=oppE;
+  updateEnergyBars();
+  renderSpells();
 });
 socket.on('game_over',({winner,xpResult,newProfile})=>{
   const iWon=winner===G.myIndex;
@@ -1015,7 +1056,8 @@ function goLobby(){
   document.getElementById('code-display').style.display='none';
   musicStop(true);
   // clear all game state
-  G.myIndex=null;G.myHP=100;G.oppHP=100;G.myTurn=false;G.counterActive=false;
+  G.myIndex=null;G.myHP=100;G.oppHP=100;G.myEnergy=100;G.oppEnergy=100;
+  G.myTurn=false;G.counterActive=false;G.roundActive=false;G.myChose=false;
   clearInterval(G.counterInterval);clearInterval(G.castInterval);
   resetCastTimer();
   resetCounterPanel();
@@ -1037,6 +1079,21 @@ function updateTurn(){
   el.className=G.myTurn?'tind mine':'tind';
   el.textContent=G.myTurn?'⚡ TU TURNO — lanza un hechizo':'Turno del rival...';
 }
+function updateEnergyBars(){
+  const me=Math.round(G.myEnergy), op=Math.round(G.oppEnergy);
+  const pebar=document.getElementById('p-ebar');
+  const eebar=document.getElementById('e-ebar');
+  const peval=document.getElementById('p-eval');
+  const eeval=document.getElementById('e-eval');
+  if(pebar) pebar.style.width=me+'%';
+  if(eebar) eebar.style.width=op+'%';
+  if(peval) peval.textContent=me;
+  if(eeval) eeval.textContent=op;
+  const col=v=>v>60?'linear-gradient(90deg,#7c3aed,#a855f7)':v>30?'linear-gradient(90deg,#b45309,#f59e0b)':'linear-gradient(90deg,#991b1b,#ef4444)';
+  if(pebar) pebar.style.background=col(me);
+  if(eebar) eebar.style.background=col(op);
+}
+
 function updateBars(){
   const ph=Math.max(0,G.myHP),eh=Math.max(0,G.oppHP);
   document.getElementById('php').style.width=ph+'%';
@@ -1044,6 +1101,7 @@ function updateBars(){
   document.getElementById('pht').textContent=ph+' / 100';
   document.getElementById('eht').textContent=eh+' / 100';
   musicSetDanger(ph<=30);
+  updateEnergyBars();
 }
 function addLog(msg,cls){document.getElementById('blog').innerHTML=`<div class="le ${cls}">${msg}</div>`;}
 function showSfx(icon){
