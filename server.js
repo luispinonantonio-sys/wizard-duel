@@ -1,1504 +1,782 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="theme-color" content="#0d0a1a">
-<title>⚡ Wizard Duel</title>
-<script src="/socket.io/socket.io.js"></script>
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap');
+const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
+const bcrypt = require('bcryptjs');
+const path = require('path');
+const fs = require('fs');
+const initSqlJs = require('sql.js');
 
-/* ── RESET & BASE ── */
-*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-html{font-size:16px;height:100%}
-body{
-  min-height:100%;min-height:100dvh;
-  background:#0d0a1a;
-  font-family:'Crimson Text',serif;
-  color:#fff;
-  overflow-x:hidden;
-  /* prevent pull-to-refresh on mobile */
-  overscroll-behavior-y:contain;
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server, { cors: { origin: '*' } });
+app.use(express.static(path.join(__dirname, 'public')));
+
+// ─── DATABASE SETUP (sql.js — pure JS, no native compilation needed) ─────────
+const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'data', 'wizard.db');
+fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+
+let db;
+
+function saveDb() {
+  try {
+    const data = db.export();
+    fs.writeFileSync(DB_PATH, Buffer.from(data));
+  } catch(e) { console.error('DB save error:', e.message); }
 }
 
-/* ── TYPOGRAPHY SCALE — mobile first ── */
-:root{
-  --f-xs:11px; --f-sm:13px; --f-md:15px; --f-lg:18px; --f-xl:22px; --f-2xl:28px;
-  --gold:#e8c87a; --purple:rgba(200,180,255,1); --green:#4ade80; --red:#f87171;
-  --r:10px; --gap:10px;
-  --safe-b: env(safe-area-inset-bottom, 0px);
-}
-
-/* ── SHARED LAYOUT ── */
-.page{
-  width:100%; max-width:430px; margin:0 auto;
-  padding:16px 14px calc(16px + var(--safe-b));
-  min-height:100dvh; display:flex; flex-direction:column;
-}
-
-/* ── SHARED COMPONENTS ── */
-.title{font-family:'Cinzel',serif;color:var(--gold);font-size:var(--f-2xl);font-weight:700;letter-spacing:3px;text-align:center;text-shadow:0 0 18px rgba(232,200,122,.4);margin-bottom:3px}
-.subtitle{color:rgba(200,180,255,.6);font-size:var(--f-sm);text-align:center;font-style:italic;margin-bottom:20px}
-.section-lbl{font-family:'Cinzel',serif;color:rgba(200,180,255,.6);font-size:10px;letter-spacing:2px;text-align:center;margin-bottom:8px}
-
-/* Inputs */
-input.field{
-  display:block;width:100%;padding:14px 16px;
-  border-radius:var(--r);border:1.5px solid rgba(200,180,255,.25);
-  background:rgba(255,255,255,.07);color:#fff;
-  font-family:'Crimson Text',serif;font-size:var(--f-md);
-  outline:none;margin-bottom:10px;
-  /* larger touch target */
-  min-height:50px;
-}
-input.field:focus{border-color:#60a5fa}
-input.field::placeholder{color:rgba(200,180,255,.35)}
-
-/* Buttons */
-.btn{
-  display:flex;align-items:center;justify-content:center;gap:8px;
-  width:100%;min-height:52px;padding:14px;
-  border-radius:var(--r);
-  font-family:'Cinzel',serif;font-size:var(--f-sm);font-weight:700;letter-spacing:2px;
-  cursor:pointer;transition:all .15s;margin-bottom:10px;
-  border:none;
-}
-.btn:active{transform:scale(.97)}
-.btn-gold{border:2px solid var(--gold);background:rgba(232,200,122,.15);color:var(--gold)}
-.btn-gold:active{background:rgba(232,200,122,.28)}
-.btn-gold:disabled{opacity:.3;pointer-events:none}
-.btn-blue{border:1.5px solid #60a5fa;background:rgba(96,165,250,.14);color:#60a5fa}
-.btn-ghost{border:1px solid rgba(200,180,255,.18);background:rgba(200,180,255,.05);color:rgba(200,180,255,.5)}
-
-.msg{text-align:center;font-size:var(--f-sm);font-style:italic;min-height:20px;margin:4px 0 8px}
-.msg.ok{color:var(--green)} .msg.err{color:var(--red)} .msg.wait{color:rgba(200,180,255,.6);animation:blink .8s infinite}
-@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
-
-/* ── AUTH SCREEN ── */
-.auth-tabs{display:flex;gap:6px;margin-bottom:18px}
-.auth-tab{
-  flex:1;padding:13px 8px;
-  border-radius:var(--r);
-  font-family:'Cinzel',serif;font-size:var(--f-sm);font-weight:700;letter-spacing:1px;
-  cursor:pointer;text-align:center;
-  border:1.5px solid rgba(200,180,255,.2);
-  background:rgba(255,255,255,.04);color:rgba(200,180,255,.5);
-  transition:all .2s;min-height:48px;
-}
-.auth-tab.on{border-color:var(--gold);background:rgba(232,200,122,.12);color:var(--gold)}
-
-/* ── PROFILE CARD ── */
-.pcard{background:rgba(255,255,255,.04);border:1px solid rgba(200,180,255,.15);border-radius:14px;padding:14px;margin-bottom:16px}
-.pcard-top{display:flex;align-items:center;gap:12px;margin-bottom:10px}
-.avatar{width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px;border:2px solid;flex-shrink:0}
-.pcard-info{flex:1;min-width:0}
-.pcard-name{font-family:'Cinzel',serif;color:var(--gold);font-size:var(--f-md);font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.pcard-lvl{font-size:var(--f-xs);font-style:italic;margin-top:2px}
-.pcard-streak{font-size:var(--f-xs);color:#facc15;font-family:'Cinzel',serif;margin-top:2px}
-.pcard-xp{text-align:right;flex-shrink:0}
-.pcard-xp-val{font-family:'Cinzel',serif;color:#a855f7;font-size:var(--f-md);font-weight:700}
-.pcard-xp-sub{font-size:9px;color:rgba(200,180,255,.5);margin-top:2px}
-.xpb-outer{height:8px;background:rgba(255,255,255,.1);border-radius:4px;overflow:hidden;margin-bottom:4px}
-.xpb-inner{height:100%;border-radius:4px;transition:width .8s ease;background:linear-gradient(90deg,#7c3aed,#a855f7)}
-.xpb-lbl{display:flex;justify-content:space-between;font-size:9px;color:rgba(200,180,255,.55);font-family:'Cinzel',serif}
-.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:10px}
-.sbox{background:rgba(0,0,0,.25);border-radius:8px;padding:8px 4px;text-align:center}
-.sbox-val{font-family:'Cinzel',serif;font-size:var(--f-lg);font-weight:700;color:var(--gold)}
-.av-modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px}
-.av-modal{background:#0d0a1a;border:1.5px solid rgba(200,180,255,.25);border-radius:16px;padding:20px;width:100%;max-width:360px}
-.av-modal-title{font-family:'Cinzel',serif;color:#e8c87a;font-size:13px;letter-spacing:2px;text-align:center;margin-bottom:4px}
-.av-modal-sub{color:rgba(200,180,255,.5);font-size:10px;text-align:center;font-style:italic;margin-bottom:14px;font-family:serif}
-.av-modal-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-bottom:14px}
-.av-opt{background:rgba(255,255,255,.05);border:1.5px solid rgba(200,180,255,.2);border-radius:10px;padding:9px 5px;cursor:pointer;text-align:center;transition:all .15s}
-.av-opt:active{transform:scale(.93)}
-.av-opt.sel{border-color:#e8c87a;background:rgba(232,200,122,.12)}
-.av-opt-icon{font-size:24px;margin-bottom:3px}
-.av-opt-name{color:#e8c87a;font-size:8px;font-weight:700;letter-spacing:.5px}
-.sbox-lbl{font-size:9px;color:rgba(200,180,255,.5);margin-top:2px}
-
-/* ── PATH SELECTION ── */
-.path-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px}
-.path-card{
-  background:rgba(255,255,255,.04);border:1.5px solid rgba(200,180,255,.2);
-  border-radius:12px;padding:12px 6px;cursor:pointer;text-align:center;
-  transition:all .15s;
-}
-.path-card:active{transform:scale(.97)}
-.path-card.on{border-color:var(--gold);background:rgba(232,200,122,.12)}
-.path-icon{font-size:28px;margin-bottom:5px}
-.path-name{font-family:'Cinzel',serif;color:var(--gold);font-size:10px;font-weight:700;letter-spacing:1px;margin-bottom:3px}
-.path-desc{color:rgba(200,180,255,.65);font-size:9px;line-height:1.4;font-style:italic}
-.path-bonus{margin-top:5px;font-size:9px;color:var(--green);font-family:'Cinzel',serif}
-
-/* Code box */
-.codebox{text-align:center;padding:16px;background:rgba(232,200,122,.07);border:1.5px solid rgba(232,200,122,.3);border-radius:12px;margin-bottom:12px}
-.codebox-lbl{font-family:'Cinzel',serif;color:rgba(200,180,255,.55);font-size:10px;letter-spacing:2px;margin-bottom:6px}
-.codebox-big{font-family:'Cinzel',serif;color:var(--gold);font-size:42px;font-weight:700;letter-spacing:8px;text-shadow:0 0 18px rgba(232,200,122,.5)}
-.codebox-sub{font-size:11px;color:rgba(200,180,255,.45);margin-top:5px;font-style:italic}
-
-.join-row{display:flex;flex-direction:column;gap:8px;margin-bottom:8px}
-input.code-inp{
-  width:100%;padding:14px 10px;
-  border-radius:var(--r);border:1.5px solid rgba(200,180,255,.25);
-  background:rgba(255,255,255,.07);color:#fff;
-  font-family:'Cinzel',serif;font-size:28px;font-weight:700;
-  letter-spacing:8px;text-transform:uppercase;text-align:center;
-  outline:none;min-height:56px;
-}
-input.code-inp:focus{border-color:#60a5fa}
-
-/* ── GAME SCREEN ── */
-#game{
-  display:none;
-  width:100%;max-width:430px;margin:0 auto;
-  /* use full viewport, fixed sections */
-  height:100dvh;
-  display:none;
-  flex-direction:column;
-  overflow:hidden;
-}
-
-/* Header strip */
-.g-hdr{
-  padding:10px 14px 6px;
-  display:flex;align-items:center;justify-content:space-between;
-  flex-shrink:0;
-}
-.g-title{font-family:'Cinzel',serif;color:var(--gold);font-size:var(--f-lg);font-weight:700;letter-spacing:2px}
-.g-badge{font-size:10px;font-family:'Cinzel',serif;letter-spacing:1px;padding:4px 10px;border-radius:20px}
-
-/* HP bars */
-.hbars{
-  display:flex;justify-content:space-between;align-items:center;
-  padding:4px 14px;gap:8px;flex-shrink:0;
-}
-.wi{flex:1;min-width:0} .wi.en{text-align:right}
-.wn{font-family:'Cinzel',serif;color:var(--gold);font-size:11px;font-weight:700;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.wlvl{font-size:9px;color:rgba(200,180,255,.5);font-style:italic;margin-bottom:3px}
-.hbc{height:9px;background:rgba(255,255,255,.1);border-radius:5px;overflow:hidden;border:.5px solid rgba(255,255,255,.1)}
-.hb{height:100%;border-radius:5px;transition:width .6s}
-.hb.p{background:#22c55e} .hb.e{background:#ef4444}
-.ht{font-size:10px;color:rgba(200,180,255,.75);margin-top:2px;font-family:'Cinzel',serif}
-.en .ht{text-align:right}
-.vs{font-family:'Cinzel',serif;color:var(--gold);font-size:16px;font-weight:700;flex-shrink:0}
-
-/* Arena */
-.arena{
-  display:flex;justify-content:space-between;align-items:flex-end;
-  padding:0 28px;height:80px;position:relative;flex-shrink:0;
-}
-.wsp{font-size:48px;user-select:none;transition:transform .3s;position:relative;display:inline-block}
-.wsp-wrap{position:relative;display:inline-flex;flex-direction:column;align-items:center}
-.wsp-badge{font-size:14px;line-height:1;margin-bottom:2px}
-.wsp.casting{animation:cA .5s ease}
-.wsp.hit{animation:hA .4s ease}
-@keyframes cA{0%{transform:scale(1)}30%{transform:scale(1.2) translateX(8px)}100%{transform:scale(1)}}
-@keyframes hA{0%{transform:translateX(0)}25%{transform:translateX(-14px) rotate(-6deg)}100%{transform:translateX(0)}}
-.sfx{position:absolute;top:50%;left:50%;font-size:30px;opacity:0;pointer-events:none;animation:sfxfly .8s ease forwards}
-@keyframes sfxfly{0%{opacity:1;transform:translate(-80%,-50%) scale(.5)}50%{opacity:1;transform:translate(-50%,-50%) scale(1.3)}100%{opacity:0;transform:translate(-20%,-50%) scale(.8)}}
-
-/* Counter panel */
-.cpanel{
-  margin:5px 12px;border-radius:12px;transition:background .3s,border .3s;
-  padding:10px 12px;flex-shrink:0;
-}
-.cpanel.idle{background:rgba(255,255,255,.03);border:1px dashed rgba(200,180,255,.13);text-align:center}
-.cpanel.active{background:rgba(180,50,50,.15);border:2px solid rgba(255,80,80,.6);animation:pp .4s ease}
-.cpanel.success{background:rgba(50,180,100,.15);border:2px solid rgba(80,255,140,.6)}
-.cpanel.fail{background:rgba(100,50,50,.2);border:1px solid rgba(200,80,80,.3)}
-.cpanel.waiting{background:rgba(255,160,50,.08);border:1px solid rgba(255,160,50,.3);text-align:center}
-@keyframes pp{0%{transform:scale(.98)}60%{transform:scale(1.02)}100%{transform:scale(1)}}
-.cp-lbl{font-family:'Cinzel',serif;font-size:10px;letter-spacing:2px;margin-bottom:5px}
-.cp-lbl.idle{color:rgba(200,180,255,.3)}
-.cp-lbl.active{color:var(--red);animation:blink .6s infinite}
-.cp-lbl.success{color:var(--green)} .cp-lbl.fail{color:rgba(200,100,100,.7)} .cp-lbl.waiting{color:rgba(255,160,50,.8)}
-.cp-phrase{
-  font-family:'Cinzel',serif;font-size:clamp(16px,4vw,22px);font-weight:700;
-  color:#fff;text-align:center;margin-bottom:8px;
-  text-shadow:0 0 14px rgba(255,200,50,.7);letter-spacing:1px;
-  line-height:1.3;
-}
-.cp-bar-outer{height:6px;background:rgba(255,255,255,.1);border-radius:3px;overflow:hidden;margin-bottom:8px}
-.cp-bar{height:100%;border-radius:3px;transition:width .1s linear}
-.cp-row{display:flex;align-items:center;gap:8px}
-.cp-mic-btn{
-  flex:1;min-height:48px;padding:10px;
-  border-radius:9px;
-  font-family:'Cinzel',serif;font-size:var(--f-sm);font-weight:700;letter-spacing:1px;
-  cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;
-  border:1.5px solid rgba(255,80,80,.5);background:rgba(255,80,80,.1);color:var(--red);
-}
-.cp-mic-btn.on{background:rgba(255,80,80,.25);border-color:var(--red);animation:mpulse 1s infinite}
-.cp-timer{font-size:18px;font-weight:700;font-family:'Cinzel',serif;color:var(--red);min-width:38px;text-align:right;flex-shrink:0}
-@keyframes mpulse{0%,100%{box-shadow:0 0 0 0 rgba(255,80,80,.3)}50%{box-shadow:0 0 0 8px rgba(255,80,80,0)}}
-
-/* Spellbook */
-.sb{padding:4px 12px 2px;flex-shrink:0}
-.sbt{font-family:'Cinzel',serif;color:rgba(200,180,255,.55);font-size:10px;letter-spacing:2px;text-align:center;margin-bottom:5px}
-.sgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
-.sc{
-  background:rgba(255,255,255,.05);border:.5px solid rgba(200,180,255,.2);
-  border-radius:10px;padding:10px 4px;cursor:pointer;
-  transition:all .15s;text-align:center;position:relative;
-  /* large touch target */
-  min-height:70px;display:flex;flex-direction:column;align-items:center;justify-content:center;
-}
-.sc:active,.sc.act{background:rgba(232,200,122,.15);border-color:var(--gold);transform:scale(.95)}
-.sc.voice-only{border-color:rgba(168,85,247,.4);background:rgba(168,85,247,.06)}
-.sc.voice-only:active{background:rgba(168,85,247,.15)}
-@keyframes shake{0%{transform:translateX(0)}20%{transform:translateX(-6px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(4px)}100%{transform:translateX(0)}}
-.sc.disabled{opacity:.3;pointer-events:none}
-.sc.secret{border-color:rgba(255,100,200,.4);background:rgba(255,100,200,.06)}
-.si{font-size:22px;margin-bottom:3px}
-.sn{font-family:'Cinzel',serif;color:var(--gold);font-size:9px;font-weight:700;line-height:1.2}
-.sdmg{font-size:9px;color:var(--red);font-family:'Cinzel',serif;margin-top:2px}
-.sheal{font-size:9px;color:var(--green);font-family:'Cinzel',serif;margin-top:2px}
-.sbadge{position:absolute;top:-4px;right:-4px;background:#ff64c8;border-radius:5px;font-size:7px;color:#fff;padding:1px 3px;font-family:'Cinzel',serif;font-weight:700}
-
-/* Mic attack button */
-.ctrl{padding:5px 12px 4px;flex-shrink:0}
-.mbn{
-  width:100%;min-height:52px;padding:12px;
-  background:rgba(200,180,255,.08);border:1.5px solid rgba(200,180,255,.3);
-  border-radius:var(--r);color:rgba(200,180,255,.9);
-  font-family:'Cinzel',serif;font-size:var(--f-sm);font-weight:700;letter-spacing:2px;
-  cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;
-  transition:all .15s;
-}
-.mbn.on{background:rgba(255,80,80,.15);border-color:rgba(255,80,80,.7);color:var(--red);animation:mpulse 1s infinite}
-.mbn.disabled{opacity:.3;pointer-events:none}
-
-/* Transcript + log */
-.tx{text-align:center;color:rgba(200,180,255,.4);font-size:11px;font-style:italic;min-height:14px;padding:2px 14px 0;flex-shrink:0}
-.blog{
-  margin:4px 12px 0;
-  background:rgba(0,0,0,.3);border:.5px solid rgba(200,180,255,.12);border-radius:9px;
-  padding:7px 11px;flex-shrink:0;
-}
-.le{color:rgba(220,210,255,.85);font-size:12px;line-height:1.5;font-style:italic}
-.le.sc2{color:var(--gold);font-style:normal;font-weight:600}
-.le.dm{color:var(--red)} .le.hl{color:var(--green)}
-.le.ms{color:rgba(200,180,255,.4)} .le.ct{color:#60a5fa;font-weight:700}
-
-/* Turn indicator */
-.tind{
-  text-align:center;font-family:'Cinzel',serif;font-size:10px;
-  color:rgba(200,180,255,.45);letter-spacing:2px;
-  padding:4px 14px calc(4px + var(--safe-b));flex-shrink:0;
-}
-.tind.mine{color:var(--gold);font-size:11px}
-
-/* ── XP RESULT ── */
-.xp-overlay{
-  position:fixed;inset:0;background:rgba(0,0,0,.93);
-  display:flex;flex-direction:column;align-items:center;
-  justify-content:flex-start;z-index:200;
-  padding:24px 18px calc(24px + var(--safe-b));
-  overflow-y:auto;text-align:center;
-}
-.xp-title{font-family:'Cinzel',serif;font-size:var(--f-2xl);font-weight:700;letter-spacing:3px;margin-bottom:6px}
-.xp-title.win{color:var(--gold);text-shadow:0 0 24px rgba(232,200,122,.7)}
-.xp-title.loss{color:var(--red)}
-.xp-gained{font-size:36px;font-weight:700;font-family:'Cinzel',serif;color:#a855f7;margin:10px 0 4px}
-.xp-gained.neg{color:var(--red)}
-.xp-breakdown{
-  margin:8px 0 12px;text-align:left;
-  background:rgba(255,255,255,.04);border-radius:10px;
-  padding:10px 14px;width:100%;
-}
-.xp-row{display:flex;justify-content:space-between;font-size:13px;color:rgba(200,180,255,.75);margin-bottom:4px}
-.xp-row .pos{color:var(--green)} .xp-row .neg2{color:var(--red)}
-.lvlup-banner{
-  background:rgba(168,85,247,.2);border:2px solid #a855f7;border-radius:10px;
-  padding:11px 20px;margin-bottom:12px;
-  font-family:'Cinzel',serif;color:#a855f7;font-size:14px;font-weight:700;letter-spacing:2px;
-  animation:lvlpulse 1s ease infinite;width:100%;
-}
-@keyframes lvlpulse{0%,100%{transform:scale(1)}50%{transform:scale(1.02)}}
-.new-xp-bar{margin:10px 0 6px;width:100%}
-.new-lvl-lbl{font-family:'Cinzel',serif;font-size:11px;letter-spacing:1px;margin-bottom:6px}
-.result-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;width:100%;margin-bottom:16px}
-</style>
-</head>
-<body>
-
-<!-- ── AUTH ── -->
-<div class="page" id="auth-screen">
-  <div style="margin-bottom:6px;padding-top:12px">
-    <div class="title">⚡ WIZARD DUEL</div>
-    <div class="subtitle">Duelo mágico multijugador</div>
-  </div>
-  <div class="auth-tabs">
-    <div class="auth-tab on" onclick="showTab('login')">INICIAR SESIÓN</div>
-    <div class="auth-tab" onclick="showTab('register')">CREAR CUENTA</div>
-  </div>
-  <div id="auth-login">
-    <input class="field" id="l-user" placeholder="Nombre de mago" autocomplete="username" autocapitalize="none">
-    <input class="field" id="l-pass" type="password" placeholder="Contraseña" autocomplete="current-password">
-    <button class="btn btn-gold" onclick="doLogin()">⚡ ENTRAR AL CASTILLO</button>
-  </div>
-  <div id="auth-register" style="display:none">
-    <input class="field" id="r-user" placeholder="Elige tu nombre de mago" autocomplete="username" autocapitalize="none">
-    <input class="field" id="r-pass" type="password" placeholder="Contraseña (mín. 3 caracteres)" autocomplete="new-password">
-    <div style="font-family:'Cinzel',serif;color:rgba(200,180,255,.6);font-size:10px;letter-spacing:2px;text-align:center;margin-bottom:8px">— ELIGE TU AVATAR —</div>
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-bottom:12px" id="av-picker"></div>
-    <button class="btn btn-gold" onclick="doRegister()">🪄 CREAR MAGO</button>
-  </div>
-  <div class="msg" id="auth-msg"></div>
-</div>
-
-<!-- ── LOBBY ── -->
-<div class="page" id="lobby-screen" style="display:none">
-  <div id="profile-card" class="pcard"></div>
-
-  <div class="section-lbl">— TU CAMINO MÁGICO —</div>
-  <div class="path-grid" id="path-grid"></div>
-
-  <div id="code-display" style="display:none" class="codebox">
-    <div class="codebox-lbl">COMPARTE ESTE CÓDIGO</div>
-    <div class="codebox-big" id="code-big">----</div>
-    <div class="codebox-sub">Esperando al rival...</div>
-  </div>
-
-  <div id="room-btns">
-    <button class="btn btn-gold" onclick="createRoom()">⚡ CREAR SALA</button>
-    <div class="join-row">
-      <input class="code-inp" id="join-code" maxlength="4" placeholder="CÓDIGO" oninput="this.value=this.value.toUpperCase()" autocomplete="off">
-      <button class="btn btn-blue" onclick="joinRoom()">UNIRSE AL DUELO</button>
-    </div>
-  </div>
-  <div class="msg" id="lobby-msg"></div>
-  <button class="btn btn-ghost" onclick="logout()" style="margin-top:auto;font-size:11px;min-height:44px">Cerrar sesión</button>
-</div>
-
-<!-- ── GAME ── -->
-<div id="game">
-  <div class="g-hdr">
-    <div class="g-title">⚡ DUELO</div>
-    <div class="g-badge" id="g-badge"></div>
-  </div>
-
-  <div class="hbars">
-    <div class="wi">
-      <div class="wn" id="p-name">🧙 TÚ</div>
-      <div class="wlvl" id="p-lvl"></div>
-      <div class="hbc"><div class="hb p" id="php" style="width:100%"></div></div>
-      <div class="ht" id="pht">100 / 100</div>
-    </div>
-    <div class="vs">VS</div>
-    <div class="wi en">
-      <div class="wn" id="opp-name">🧙‍♀️ RIVAL</div>
-      <div class="wlvl" id="opp-lvl" style="text-align:right"></div>
-      <div class="hbc"><div class="hb e" id="ehp" style="width:100%"></div></div>
-      <div class="ht" id="eht">100 / 100</div>
-    </div>
-  </div>
-
-  <div class="arena" id="arena">
-    <div class="wsp-wrap">
-      <div class="wsp-badge" id="psp-badge">🌱</div>
-      <div class="wsp" id="psp">🧙</div>
-    </div>
-    <div class="wsp-wrap">
-      <div class="wsp-badge" id="esp-badge">🌱</div>
-      <div class="wsp" id="esp">🧙‍♀️</div>
-    </div>
-  </div>
-
-  <div class="cpanel idle" id="cpanel">
-    <div class="cp-lbl idle">CONTRAATAQUE EN ESPERA</div>
-    <div style="font-size:11px;color:rgba(200,180,255,.35);font-style:italic;margin-top:2px">Cuando el rival ataque, aparece aquí</div>
-  </div>
-
-  <!-- cast timer -->
-  <div style="padding:4px 12px 2px;flex-shrink:0" id="cast-timer-wrap" style="display:none">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-      <div style="font-family:Cinzel,serif;font-size:9px;letter-spacing:2px;color:rgba(200,180,255,.5)" id="cast-lbl">ELIGE TU HECHIZO</div>
-      <div style="font-family:Cinzel,serif;font-size:16px;font-weight:700;color:#e8c87a" id="cast-secs">4.0s</div>
-    </div>
-    <div style="height:5px;background:rgba(255,255,255,.1);border-radius:3px;overflow:hidden">
-      <div id="cast-bar" style="height:100%;border-radius:3px;background:#e8c87a;width:100%;transition:width .1s linear"></div>
-    </div>
-  </div>
-
-  <div class="sb">
-    <div class="sbt">— GRIMORIO —</div>
-    <div class="sgrid" id="sgrid"></div>
-  </div>
-
-  <div class="ctrl">
-    <button class="mbn" id="mbn" onclick="toggleAtk()">
-      <span style="font-size:18px">🎤</span>
-      <span id="mbntxt">PULSA PARA LANZAR HECHIZO</span>
-    </button>
-  </div>
-
-  <div class="tx" id="tx"></div>
-  <div class="blog" id="blog"><div class="le">Conectando al duelo...</div></div>
-  <div class="tind" id="tind">—</div>
-</div>
-
-<script>
-const PATHS={
-  destructor:{name:'Destructor',icon:'💥',color:'#f87171',desc:'Daño puro.',bonus:'+30% daño',
-    spells:['aturdir','destruir','expulsar','quemar'],
-    basicSpells:['aturdir','expulsar'],
-  },
-  guardian:  {name:'Guardián',  icon:'🛡️',color:'#60a5fa',desc:'Defensa total.',bonus:'Curación +60%',
-    spells:['escudo','sanar','expulsar','restaurar'],
-    basicSpells:['escudo','sanar'],
-  },
-  trickster: {name:'Trickster', icon:'🎭',color:'#c084fc',desc:'Caos y engaño.',bonus:'Hechizos ocultos',
-    spells:['confundir','expulsar','aturdir','desgarrar'],
-    basicSpells:['confundir','expulsar'],
-  },
-};
-const SPELLS={
-  // ── BÁSICOS — disponibles con clic y voz ──────────────────────────────────
-  aturdir:   {name:'Aturdir',   icon:'⚡',dmg:25,heal:0,   kw:['aturdir','aturde','aturdece']},
-  expulsar:  {name:'Expulsar',  icon:'💥',dmg:20,heal:0,   kw:['expulsar','expulsa','expulso']},
-  sanar:     {name:'Sanar',     icon:'🌟',dmg:0, heal:20,  kw:['sanar','sana','cura','curar']},
-  escudo:    {name:'Escudo',    icon:'🛡️',dmg:0, heal:0,shield:true, kw:['escudo','proteger','protege']},
-  // ── PODEROSOS — solo voz ──────────────────────────────────────────────────
-  destruir:  {name:'Destruir',  icon:'💀',dmg:45,heal:0,   kw:['destruir','destruye','destrucción'],voiceOnly:true},
-  quemar:    {name:'Quemar',    icon:'🔥',dmg:35,heal:0,   kw:['quemar','quema','fuego'],voiceOnly:true},
-  restaurar: {name:'Restaurar', icon:'💧',dmg:0, heal:30,  kw:['restaurar','restaura','restauro'],voiceOnly:true},
-  confundir: {name:'Confundir', icon:'🌀',dmg:15,heal:0,stun:true, kw:['confundir','confunde','confundo'],voiceOnly:true},
-  desgarrar: {name:'Desgarrar', icon:'🗡️',dmg:40,heal:0,   kw:['desgarrar','desgarra','desgarro'],voiceOnly:true,secret:true},
-};
-const LEVEL_META=[
-  {n:1,name:'Novato',   color:'#4ade80',icon:'🌱'},
-  {n:2,name:'Aprendiz', color:'#a3e635',icon:'🌿'},
-  {n:3,name:'Iniciado', color:'#facc15',icon:'⚡'},
-  {n:4,name:'Experto',  color:'#fb923c',icon:'🔥'},
-  {n:5,name:'Maestro',  color:'#c084fc',icon:'💀'},
-];
-const AVATARS=[
-  {icon:'🧙', name:'Mago'},
-  {icon:'🧙‍♀️',name:'Maga'},
-  {icon:'🧝', name:'Elfo'},
-  {icon:'🧝‍♀️',name:'Elfa'},
-  {icon:'👸', name:'Princesa'},
-  {icon:'🤴', name:'Príncipe'},
-  {icon:'🧚', name:'Hada'},
-  {icon:'🐱', name:'Gato'},
-  {icon:'👹', name:'Ogro'},
-  {icon:'🧟', name:'Nigromante'},
-  {icon:'🐲', name:'Dragón'},
-  {icon:'🦉', name:'Búho'},
-];
-const XP_THRESHOLDS=[0,100,300,700,1500];
-
-let G={
-  profile:null,selectedPath:null,selectedAvatar:'🧙',
-  myIndex:null,myHP:100,oppHP:100,
-  myTurn:false,counterActive:false,
-  listening:false,recognition:null,atkRec:null,
-  counterInterval:null,counterStartTs:0,castInterval:null,
-};
-
-const socket=io({
-  reconnection: true,
-  reconnectionAttempts: 10,
-  reconnectionDelay: 1000,
-  reconnectionDelayMax: 5000,
-});
-
-// When socket reconnects, restore session automatically
-socket.on('connect', () => {
-  // only attempt restore if we have a stored username but lost our profile
-  try{
-    const stored = sessionStorage.getItem('wduser');
-    if(stored && !G.profile){
-      setAuthMsg('Reconectando...','wait');
-      socket.emit('reconnect_session', { username: stored });
-    }
-  }catch(e){}
-});
-
-// ── AUTH ─────────────────────────────────────────────────────────────────────
-function showTab(t){
-  document.querySelectorAll('.auth-tab').forEach((el,i)=>el.classList.toggle('on',(i===0)===(t==='login')));
-  document.getElementById('auth-login').style.display   =t==='login'   ?'block':'none';
-  document.getElementById('auth-register').style.display=t==='register'?'block':'none';
-  setAuthMsg('','');
-  if(t==='register') renderAvatarPicker();
-}
-function renderAvatarPicker(){
-  const grid=document.getElementById('av-picker');
-  if(!grid||grid.children.length>0) return;
-  grid.innerHTML=AVATARS.map((a,i)=>`
-    <div onclick="pickAvatar('${a.icon}',this)" style="
-      background:rgba(255,255,255,.05);border:1.5px solid ${i===0?'#e8c87a':'rgba(200,180,255,.2)'};
-      border-radius:10px;padding:8px 4px;cursor:pointer;text-align:center;transition:all .15s;
-      ${i===0?'background:rgba(232,200,122,.12);':''}
-    ">
-      <div style="font-size:24px;margin-bottom:3px">${a.icon}</div>
-      <div style="font-family:'Cinzel',serif;color:#e8c87a;font-size:8px;font-weight:700;letter-spacing:.5px">${a.name.toUpperCase()}</div>
-    </div>`).join('');
-  G.selectedAvatar=AVATARS[0].icon;
-}
-function pickAvatar(icon,el){
-  G.selectedAvatar=icon;
-  document.querySelectorAll('#av-picker > div').forEach(d=>{
-    d.style.borderColor='rgba(200,180,255,.2)';
-    d.style.background='rgba(255,255,255,.05)';
-  });
-  el.style.borderColor='#e8c87a';
-  el.style.background='rgba(232,200,122,.12)';
-}
-function setAuthMsg(t,cls){const el=document.getElementById('auth-msg');el.textContent=t;el.className='msg '+(cls||'');}
-function doLogin(){
-  const u=document.getElementById('l-user').value.trim();
-  const p=document.getElementById('l-pass').value;
-  if(!u||!p){setAuthMsg('Completa los campos','err');return;}
-  socket.emit('login',{username:u,password:p});
-  setAuthMsg('Verificando...','wait');
-}
-function doRegister(){
-  const u=document.getElementById('r-user').value.trim();
-  const p=document.getElementById('r-pass').value;
-  if(!u||!p){setAuthMsg('Completa los campos','err');return;}
-  socket.emit('register',{username:u,password:p,avatar:G.selectedAvatar||'🧙'});
-  setAuthMsg('Creando tu mago...','wait');
-}
-socket.on('auth_ok',profile=>{
-  G.profile=profile;
-  try{ sessionStorage.setItem('wduser', profile.username); }catch(e){}
-  document.getElementById('auth-screen').style.display='none';
-  document.getElementById('lobby-screen').style.display='flex';
-  renderLobby();
-  // if user had a pending room (reconnect while waiting), restore it
-  if(profile.pendingRoom){
-    document.getElementById('room-btns').style.display='none';
-    document.getElementById('code-display').style.display='block';
-    document.getElementById('code-big').textContent=profile.pendingRoom;
-    setLobbyMsg('Reconectado — esperando al rival...','wait');
-  }
-});
-socket.on('auth_error',({msg})=>setAuthMsg(msg,'err'));
-
-socket.on('session_invalid',()=>{
-  try{ sessionStorage.removeItem('wduser'); }catch(e){}
-  setAuthMsg('Sesión expirada — inicia sesión de nuevo','err');
-});
-
-socket.on('session_restored',({profile,inDuel,yourIndex,yourLevel,oppLevel,oppName,oppAvatar})=>{
-  G.profile=profile;
-  setAuthMsg('','');
-  if(inDuel && yourIndex!=null){
-    // restore mid-game state
-    G.myIndex=yourIndex; G.myHP=100; G.oppHP=100; G.myTurn=false;
-    document.getElementById('auth-screen').style.display='none';
-    document.getElementById('lobby-screen').style.display='none';
-    const gameEl=document.getElementById('game');
-    gameEl.style.display='flex';
-    const p=PATHS[G.selectedPath]||PATHS.destructor;
-    // restore what we can from server state
-    const myAv=profile.avatar||'🧙';
-    const oppAv=oppAvatar||'🧙‍♀️';
-    document.getElementById('psp').textContent=myAv;
-    document.getElementById('esp').textContent=oppAv;
-    document.getElementById('p-name').textContent=myAv+' '+profile.username.toUpperCase();
-    document.getElementById('opp-name').textContent=oppAv+' '+(oppName||'RIVAL').toUpperCase();
-    const myM=LEVEL_META.find(l=>l.n===yourLevel)||LEVEL_META[0];
-    const opM=LEVEL_META.find(l=>l.n===oppLevel)||LEVEL_META[0];
-    document.getElementById('psp-badge').textContent=myM.icon;
-    document.getElementById('esp-badge').textContent=opM.icon;
-    document.getElementById('p-lvl').textContent=myM.icon+' '+myM.name;
-    document.getElementById('opp-lvl').textContent=opM.icon+' '+opM.name;
-    addLog('🔄 Reconectado al duelo','hl');
-    _initAudio(); musicStart();
-    if(!G.selectedPath) G.selectedPath='destructor';
-    renderSpells();
+async function initDb() {
+  const SQL = await initSqlJs();
+  if (fs.existsSync(DB_PATH)) {
+    const fileBuffer = fs.readFileSync(DB_PATH);
+    db = new SQL.Database(fileBuffer);
+    console.log('Loaded existing DB from', DB_PATH);
   } else {
-    // back to lobby
-    document.getElementById('auth-screen').style.display='none';
-    document.getElementById('lobby-screen').style.display='flex';
-    renderLobby();
-    // if had a pending room, show the code box
-    if(profile.pendingRoom){
-      document.getElementById('room-btns').style.display='none';
-      document.getElementById('code-display').style.display='block';
-      document.getElementById('code-big').textContent=profile.pendingRoom;
-      setLobbyMsg('Reconectado — esperando al rival...','wait');
-    }
+    db = new SQL.Database();
+    console.log('Created new DB at', DB_PATH);
   }
-});
-function logout(){
-  G.profile=null;G.selectedPath=null;
-  try{ sessionStorage.removeItem('wduser'); }catch(e){}
-  document.getElementById('lobby-screen').style.display='none';
-  document.getElementById('auth-screen').style.display='flex';
-  setAuthMsg('','');
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS profiles (
+      username      TEXT PRIMARY KEY,
+      password_hash TEXT NOT NULL,
+      avatar        TEXT NOT NULL DEFAULT '🧙',
+      xp            INTEGER NOT NULL DEFAULT 0,
+      level         INTEGER NOT NULL DEFAULT 1,
+      streak        INTEGER NOT NULL DEFAULT 0,
+      last_win      INTEGER,
+      wins          INTEGER NOT NULL DEFAULT 0,
+      losses        INTEGER NOT NULL DEFAULT 0,
+      counters_ok   INTEGER NOT NULL DEFAULT 0,
+      counters_fail INTEGER NOT NULL DEFAULT 0,
+      combos        INTEGER NOT NULL DEFAULT 0,
+      total_rxn_ms  INTEGER NOT NULL DEFAULT 0,
+      rxn_samples   INTEGER NOT NULL DEFAULT 0,
+      created_at    INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+    )
+  `);
+
+  try { db.run(`ALTER TABLE profiles ADD COLUMN avatar TEXT NOT NULL DEFAULT '🧙'`); }
+  catch(e) { /* already exists */ }
+
+  saveDb();
+  // Auto-save every 30 seconds
+  setInterval(saveDb, 30000);
 }
 
-// ── LOBBY ─────────────────────────────────────────────────────────────────────
-function renderLobby(){
-  renderProfileCard(G.profile);
-  document.getElementById('path-grid').innerHTML=Object.entries(PATHS).map(([k,p])=>
-    `<div class="path-card${G.selectedPath===k?' on':''}" data-path="${k}" onclick="selPath('${k}')">
-      <div class="path-icon">${p.icon}</div>
-      <div class="path-name">${p.name.toUpperCase()}</div>
-      <div class="path-desc">${p.desc}</div>
-      <div class="path-bonus">${p.bonus}</div>
-    </div>`).join('');
-}
-function renderProfileCard(profile){
-  const lm=LEVEL_META.find(l=>l.n===profile.level)||LEVEL_META[0];
-  const xpC=XP_THRESHOLDS[profile.level-1]||0;
-  const xpN=XP_THRESHOLDS[profile.level]||profile.xp;
-  const pct=profile.next?Math.min(100,Math.round((profile.xp-xpC)/(xpN-xpC)*100)):100;
-  const avgRxn=profile.stats.avgReactionMs?(profile.stats.avgReactionMs/1000).toFixed(2)+'s':'—';
-  const wr=profile.stats.wins+profile.stats.losses>0?Math.round(profile.stats.wins/(profile.stats.wins+profile.stats.losses)*100)+'%':'—';
-  const myAvatar=profile.avatar||'🧙';
-  document.getElementById('profile-card').innerHTML=`
-    <div class="pcard-top">
-      <div class="avatar" style="background:${lm.color}22;border-color:${lm.color};position:relative">
-        <span>${myAvatar}</span>
-        <span style="position:absolute;bottom:-4px;right:-4px;font-size:12px;line-height:1">${lm.icon}</span>
-      </div>
-      <div class="pcard-info">
-        <div class="pcard-name">${profile.username}</div>
-        <div class="pcard-lvl" style="color:${lm.color}">Nv.${profile.level} — ${lm.name}</div>
-        ${profile.streak>=2?`<div class="pcard-streak">🔥 Racha: ${profile.streak}</div>`:''}
-      </div>
-      <div class="pcard-xp">
-        <div class="pcard-xp-val">${profile.xp} XP</div>
-        <div class="pcard-xp-sub">${profile.next?profile.next.needed+' para '+profile.next.nextName:'NIVEL MÁX.'}</div>
-      </div>
-    </div>
-    <div class="xpb-outer"><div class="xpb-inner" style="width:${pct}%"></div></div>
-    <div class="xpb-lbl"><span>${xpC} XP</span><span>${profile.next?xpN+' XP':'Maestro'}</span></div>
-    <div class="stats-row">
-      <div class="sbox"><div class="sbox-val">${profile.stats.wins}</div><div class="sbox-lbl">Victorias</div></div>
-      <div class="sbox"><div class="sbox-val">${wr}</div><div class="sbox-lbl">Win %</div></div>
-      <div class="sbox"><div class="sbox-val">${profile.stats.countersSuccess}</div><div class="sbox-lbl">Contras</div></div>
-      <div class="sbox"><div class="sbox-val">${avgRxn}</div><div class="sbox-lbl">Reacción</div></div>
-    </div>
-    <button onclick="openAvatarModal()" style="
-      width:100%;margin-top:10px;padding:10px;border-radius:8px;
-      border:1px solid rgba(200,180,255,.25);background:rgba(200,180,255,.07);
-      color:rgba(200,180,255,.8);font-family:Cinzel,serif;font-size:10px;
-      font-weight:700;letter-spacing:2px;cursor:pointer;transition:all .15s;
-    ">✏️ CAMBIAR AVATAR</button>`;
-}
-function selPath(k){
-  document.querySelectorAll('.path-card').forEach(c=>c.classList.remove('on'));
-  document.querySelector(`[data-path="${k}"]`).classList.add('on');
-  G.selectedPath=k;
-}
-function setLobbyMsg(t,cls){const el=document.getElementById('lobby-msg');el.textContent=t;el.className='msg '+(cls||'');}
-function createRoom(){
-  if(!G.selectedPath){setLobbyMsg('Elige tu camino primero','err');return;}
-  socket.emit('create_room',{path:G.selectedPath});
-}
-function joinRoom(){
-  if(!G.selectedPath){setLobbyMsg('Elige tu camino primero','err');return;}
-  const code=document.getElementById('join-code').value.trim().toUpperCase();
-  if(code.length!==4){setLobbyMsg('Código de 4 letras','err');return;}
-  socket.emit('join_room',{code,path:G.selectedPath});
-  setLobbyMsg('Conectando...','wait');
-}
-socket.on('room_created',({code})=>{
-  document.getElementById('room-btns').style.display='none';
-  document.getElementById('code-display').style.display='block';
-  document.getElementById('code-big').textContent=code;
-  setLobbyMsg('Esperando al rival...','wait');
-});
-socket.on('error',({msg})=>setLobbyMsg(msg,'err'));
+// ─── DB HELPERS (replicate better-sqlite3 API) ───────────────────────────────
+const stmts = {
+  findUser(username) {
+    const res = db.exec('SELECT * FROM profiles WHERE username = ?', [username]);
+    if (!res.length || !res[0].values.length) return null;
+    const cols = res[0].columns;
+    const row = res[0].values[0];
+    const obj = {};
+    cols.forEach((c, i) => obj[c] = row[i]);
+    return obj;
+  },
+  insertUser({ username, password_hash, avatar }) {
+    db.run('INSERT INTO profiles (username, password_hash, avatar) VALUES (?, ?, ?)',
+      [username, password_hash, avatar || '🧙']);
+    saveDb();
+  },
+  updateProfile(p) {
+    db.run(`UPDATE profiles SET
+      xp=?, level=?, streak=?, last_win=?,
+      wins=?, losses=?, counters_ok=?, counters_fail=?,
+      combos=?, total_rxn_ms=?, rxn_samples=?
+      WHERE username=?`,
+      [p.xp, p.level, p.streak||0, p.last_win||null,
+       p.wins, p.losses, p.counters_ok, p.counters_fail,
+       p.combos, p.total_rxn_ms, p.rxn_samples,
+       p.username]);
+    saveDb();
+  },
+  updateAvatar(username, avatar) {
+    db.run('UPDATE profiles SET avatar=? WHERE username=?', [avatar, username]);
+    saveDb();
+  },
+};
 
-// ── DUEL START ────────────────────────────────────────────────────────────────
-socket.on('duel_start',({yourIndex,yourLevel,oppLevel,oppName,oppAvatar})=>{
-  G.myIndex=yourIndex; G.myHP=100; G.oppHP=100; G.myTurn=yourIndex===0;
-  updateBars(); // reset HP bars visually
-  resetCounterPanel(); // reset counter panel
-  document.getElementById('lobby-screen').style.display='none';
-  const gameEl=document.getElementById('game');
-  gameEl.style.display='flex';
-  const p=PATHS[G.selectedPath];
-  const badge=document.getElementById('g-badge');
-  badge.textContent=p.icon+' '+p.name.toUpperCase();
-  badge.style.cssText=`background:${p.color}22;color:${p.color};border:.5px solid ${p.color}55`;
-  const myM=LEVEL_META.find(l=>l.n===yourLevel)||LEVEL_META[0];
-  const opM=LEVEL_META.find(l=>l.n===oppLevel)||LEVEL_META[0];
-  const myAv=G.profile.avatar||'🧙';
-  const oppAv=oppAvatar||'🧙‍♀️';
-  document.getElementById('psp').textContent=myAv;
-  document.getElementById('esp').textContent=oppAv;
-  document.getElementById('p-name').textContent=myAv+' '+G.profile.username.toUpperCase();
-  document.getElementById('p-lvl').textContent=myM.icon+' '+myM.name+' · '+G.profile.counterSecs+'s';
-  document.getElementById('opp-name').textContent=oppAv+' '+oppName.toUpperCase();
-  document.getElementById('opp-lvl').textContent=opM.icon+' '+opM.name;
-  document.getElementById('psp-badge').textContent=myM.icon;
-  document.getElementById('esp-badge').textContent=opM.icon;
-  _initAudio();
-  musicStart();
-  renderSpells();
-  setSpellsDisabled(!G.myTurn);
-  updateTurn();
-  addLog('⚔️ ¡El duelo comienza!','');
-  document.getElementById('tind').textContent='—';
-  // auto-mic for player 0 who goes first
-  if(G.myTurn && isVoice()){
-    setTimeout(()=>{ if(G.myTurn && !G.listening) startListen(); }, 600);
-  }
-});
-
-// ── SPELLS ────────────────────────────────────────────────────────────────────
-function renderSpells(){
-  document.getElementById('sgrid').innerHTML=PATHS[G.selectedPath].spells.map(sk=>{
-    const s=SPELLS[sk];
-    const isVoiceOnly=s.voiceOnly;
-    const isSecret=s.secret;
-    return `<div class="sc${isVoiceOnly?' voice-only':''}${isSecret?' secret':''}"
-      data-spell="${sk}"
-      onclick="clickSpell('${sk}')"
-      title="${isVoiceOnly?'Solo voz 🎤':'Clic o voz'}">
-      ${isSecret?'<div class="sbadge">OCULTO</div>':''}
-      ${isVoiceOnly?'<div class="sbadge" style="background:#a855f7">🎤</div>':''}
-      <div class="si">${s.icon}</div>
-      <div class="sn">${s.name}</div>
-      ${s.dmg>0?`<div class="sdmg">-${s.dmg}</div>`:''}
-      ${s.heal>0?`<div class="sheal">+${s.heal}</div>`:''}
-      ${s.shield?'<div class="sheal">Escudo</div>':''}
-      ${s.stun?'<div class="sdmg">Aturde</div>':''}
-      ${isVoiceOnly?'<div style="font-size:8px;color:#a855f7;font-family:Cinzel,serif;margin-top:2px">SOLO VOZ</div>':''}
-    </div>`;
-  }).join('');
-}
-function setSpellsDisabled(d){
-  document.querySelectorAll('.sc').forEach(c=>c.classList.toggle('disabled',d));
-  document.getElementById('mbn').classList.toggle('disabled',d);
-}
-function clickSpell(sk){
-  if(!G.myTurn||G.counterActive)return;
-  const s=SPELLS[sk];
-  if(s && s.voiceOnly){
-    // shake the card to signal it needs voice
-    const card=document.querySelector(`[data-spell="${sk}"]`);
-    if(card){
-      card.style.animation='shake .4s ease';
-      setTimeout(()=>card.style.animation='',500);
-    }
-    addLog('🎤 Este hechizo solo se activa con la voz','ms');
-    return;
-  }
-  playSound(spellSoundKey(sk));
-  socket.emit('cast_spell',{spell:sk});
-  document.getElementById('psp').classList.add('casting');
-  setTimeout(()=>document.getElementById('psp').classList.remove('casting'),600);
-  setSpellsDisabled(true);
-}
-
-// ── VOICE ─────────────────────────────────────────────────────────────────────
-function toggleAtk(){
-  if(!G.myTurn||G.counterActive)return;
-  if(!isVoice()){addLog('Voz no disponible — usa los botones','ms');return;}
-  if(G.listening){stopListen();return;}
-  startListen();
-}
-function startListen(){
-  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  const r=new SR();r.lang='es-ES';r.interimResults=true;r.maxAlternatives=5;
-  G.recognition=r;G.listening=true;
-  document.getElementById('mbn').classList.add('on');
-  document.getElementById('mbntxt').textContent='ESCUCHANDO... ¡LANZA!';
-  r.onresult=e=>{
-    let best='';
-    for(let i=0;i<e.results.length;i++)for(let j=0;j<e.results[i].length;j++)best=e.results[i][j].transcript;
-    document.getElementById('tx').textContent='"'+best+'"';
-    if(e.results[0].isFinal){processVoice(best.toLowerCase());stopListen();}
-  };
-  r.onerror=()=>stopListen();r.onend=()=>stopListen();r.start();
-}
-function stopListen(){
-  G.listening=false;try{G.recognition?.stop();}catch(e){}
-  document.getElementById('mbn').classList.remove('on');
-  document.getElementById('mbntxt').textContent=G.myTurn?'🎤 TOCA PARA REACTIVAR':'EN ESPERA...';
-}
-function processVoice(text){
-  for(const sk of PATHS[G.selectedPath].spells)
-    for(const kw of SPELLS[sk].kw)if(text.includes(kw)){clickSpell(sk);return;}
-  addLog('¡Hechizo no reconocido!','ms');
-}
-
-// ── SOCKET EVENTS ─────────────────────────────────────────────────────────────
-socket.on('spell_result',({caster,spell,effect,dmg,heal})=>{
-  const s=SPELLS[spell];if(!s)return;
-  showSfx(s.icon);
-  const isMe=caster===G.myIndex;
-  if(effect==='attack'){
-    if(!isMe)playSound(spellSoundKey(spell));
-    playSound('hit');
-    document.getElementById(isMe?'esp':'psp').classList.add('hit');
-    setTimeout(()=>document.getElementById(isMe?'esp':'psp').classList.remove('hit'),500);
-    addLog(isMe?`${s.icon} ¡${s.name}! El rival puede contraatacar...`:`${s.icon} ¡${s.name}! ¡CONTRAATACA!`,isMe?'sc2':'dm');
-  }else if(effect==='shield'){
-    if(!isMe)playSound('protego');
-    addLog(isMe?'🛡️ ¡Protego! Escudo activo.':'⚔️ El rival activa Protego.','sc2');
-  }else if(effect==='heal'){
-    if(!isMe)playSound(spellSoundKey(spell));
-    if(isMe){G.myHP=Math.min(100,G.myHP+heal);addLog(`🌟 +${heal} HP`,'hl');}
-    else{G.oppHP=Math.min(100,G.oppHP+heal);addLog(`🌟 El rival se cura ${heal} HP`,'hl');}
-    updateBars();
-  }else if(effect==='stun'){
-    if(!isMe)playSound(spell);
-    if(!isMe){G.myHP=Math.max(0,G.myHP-dmg);document.getElementById('psp').classList.add('hit');setTimeout(()=>document.getElementById('psp').classList.remove('hit'),500);addLog(`🌀 ¡${s.name}! ${dmg} daño + aturdido`,'dm');playSound('hit');}
-    else{G.oppHP=Math.max(0,G.oppHP-dmg);document.getElementById('esp').classList.add('hit');setTimeout(()=>document.getElementById('esp').classList.remove('hit'),500);addLog(`🌀 ¡${s.name}! ${dmg} daño + rival aturdido`,'sc2');}
-    updateBars();
-  }
-});
-socket.on('counter_challenge',({phrase,keywords,secs,rawDmg})=>{
-  playSound('shield_hit');
-  G.counterActive=true;G.counterStartTs=Date.now();
-  window._counterKW=keywords||null;
-  setSpellsDisabled(true);showCounterChallenge(phrase,secs,rawDmg);
-});
-socket.on('counter_pending',({secs})=>{
-  const p=document.getElementById('cpanel');p.className='cpanel waiting';
-  p.innerHTML=`<div class="cp-lbl waiting">⏳ EL RIVAL CONTRAATACA</div>
-    <div style="font-size:11px;color:rgba(255,160,50,.7);margin-top:3px;font-style:italic">Tiene ${secs}s...</div>`;
-});
-socket.on('counter_result',({success,rebound,dmg,defender})=>{
-  clearInterval(G.counterInterval);G.counterActive=false;
-  const iAm=defender===G.myIndex;
-  if(success){
-    playSound('counter');
-    showSfx('🛡️');
-    if(iAm){G.oppHP=Math.max(0,G.oppHP-rebound);addLog(`🛡️ ¡CONTRAATAQUE! ${rebound} daño de rebote`,'ct');}
-    else{G.myHP=Math.max(0,G.myHP-rebound);document.getElementById('psp').classList.add('hit');setTimeout(()=>document.getElementById('psp').classList.remove('hit'),500);addLog(`🛡️ El rival bloqueó — ${rebound} rebote`,'dm');playSound('hit');}
-    const p=document.getElementById('cpanel');p.className='cpanel success';
-    p.innerHTML=`<div class="cp-lbl success">✅ ${iAm?'¡Bloqueaste el ataque!':'El rival bloqueó'}</div>`;
-  }else{
-    playSound('hit');
-    if(iAm){G.myHP=Math.max(0,G.myHP-dmg);document.getElementById('psp').classList.add('hit');setTimeout(()=>document.getElementById('psp').classList.remove('hit'),500);addLog(`❌ Contraataque fallido. ${dmg} daño`,'dm');}
-    else{G.oppHP=Math.max(0,G.oppHP-dmg);document.getElementById('esp').classList.add('hit');setTimeout(()=>document.getElementById('esp').classList.remove('hit'),500);addLog(`⚔️ El rival falló. ${dmg} daño infligido`,'sc2');}
-    const p=document.getElementById('cpanel');p.className='cpanel fail';
-    p.innerHTML=`<div class="cp-lbl fail">❌ ${iAm?'Contraataque fallido':'El rival no bloqueó'}</div>`;
-  }
-  updateBars();
-  setTimeout(()=>resetCounterPanel(),1800);
-});
-socket.on('turn_skipped',({skipped})=>{
-  playSound('timeout');
-  clearInterval(G.castInterval);
-  resetCastTimer();
-  if(skipped===G.myIndex){
-    addLog('⏰ Tiempo agotado — perdiste el turno','dm');
-  } else {
-    addLog('⏰ El rival tardó demasiado — es tu turno','hl');
-  }
-});
-
-socket.on('turn_change',({turn,spellOrder,castSecs,castDeadline})=>{
-  if(spellOrder && turn===G.myIndex) reshuffleSpells(spellOrder);
-  if(castSecs && turn===G.myIndex) startCastTimer(castSecs, castDeadline);
-  else { clearInterval(G.castInterval); resetCastTimer(); }
-  G.myTurn=turn===G.myIndex;setSpellsDisabled(!G.myTurn);updateTurn();
-  // auto-activate mic when it's your turn
-  if(G.myTurn && !G.counterActive && isVoice()){
-    // small delay so cast timer renders first
-    setTimeout(()=>{
-      if(G.myTurn && !G.listening && !G.counterActive) startListen();
-    }, 400);
-  }
-});
-socket.on('game_over',({winner,xpResult,newProfile})=>{
-  const iWon=winner===G.myIndex;
-  if(newProfile)G.profile=newProfile;
-  clearInterval(G.castInterval); resetCastTimer();  // stop cast timer
-  stopListen();                                       // stop mic
-  musicStop(true); // immediate stop
-  setTimeout(()=>playSound(iWon?'victory':'defeat'),400);
-  showXPResult(iWon,xpResult,newProfile);
-});
-socket.on('opponent_disconnected',()=>{ musicStop(); showXPResult(true,null,null,true); });
-socket.on('opponent_reconnected',()=>{ addLog('🔄 ¡El rival reconectó!','hl'); });
-
-// ── COUNTER UI ────────────────────────────────────────────────────────────────
-function showCounterChallenge(phrase,secs,rawDmg){
-  window._counterPhrase=phrase;
-  const panel=document.getElementById('cpanel');
-  panel.className='cpanel active';
-  panel.innerHTML=`
-    <div class="cp-lbl active">⚡ ¡CONTRAATACA! DI ESTA FRASE:</div>
-    <div class="cp-phrase">${phrase}</div>
-    <div class="cp-bar-outer"><div class="cp-bar" id="cp-bar" style="width:100%;background:#f87171"></div></div>
-    <div class="cp-row">
-      <button class="cp-mic-btn" id="cp-mic" onclick="startCounterVoice('${phrase.replace(/'/g,"\\'")}')">🎤 GRITAR FRASE</button>
-      <div class="cp-timer" id="cp-timer">${secs.toFixed(1)}s</div>
-    </div>`;
-  const deadline=Date.now()+secs*1000;
-  G.counterInterval=setInterval(()=>{
-    const left=Math.max(0,deadline-Date.now());
-    const pct=left/(secs*1000)*100;
-    const bar=document.getElementById('cp-bar'),txt=document.getElementById('cp-timer');
-    if(bar){bar.style.width=Math.round(pct)+'%';bar.style.background=pct>50?'#f87171':pct>20?'#fbbf24':'#ef4444';}
-    if(txt)txt.textContent=(left/1000).toFixed(1)+'s';
-    if(left<=0){clearInterval(G.counterInterval);socket.emit('counter_attempt',{success:false,reactionMs:null});}
-  },100);
-}
-function startCounterVoice(phrase,keywords){
-  if(!isVoice()){socket.emit('counter_attempt',{success:false,reactionMs:null});return;}
-  const btn=document.getElementById('cp-mic');
-  if(btn){btn.classList.add('on');btn.textContent='🔴 ESCUCHANDO...';}
-  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  const r=new SR();r.lang='es-ES';r.interimResults=false;r.maxAlternatives=5;
-  r.onresult=e=>{
-    let best='';
-    for(let i=0;i<e.results[0].length;i++)if(e.results[0][i].transcript.length>best.length)best=e.results[0][i].transcript;
-    document.getElementById('tx').textContent='"'+best+'"';
-    const spoken=best.toLowerCase().trim();
-    const kws=keywords||[phrase.replace(/[¡!]/g,'').toLowerCase()];
-    const success=kws.some(kw=>spoken.includes(kw)||kw.startsWith(spoken.substring(0,4)));
-    const reactionMs=Date.now()-G.counterStartTs;
-    clearInterval(G.counterInterval);
-    socket.emit('counter_attempt',{success,reactionMs});
-    try{r.stop();}catch(e){}
-  };
-  r.onerror=()=>{socket.emit('counter_attempt',{success:false,reactionMs:null});try{r.stop();}catch(e){}};
-  r.onend=()=>{};
-  r.start();
-}
-function resetCounterPanel(){
-  const p=document.getElementById('cpanel');
-  p.className='cpanel idle';
-  p.innerHTML=`<div class="cp-lbl idle">CONTRAATAQUE EN ESPERA</div>
-    <div style="font-size:11px;color:rgba(200,180,255,.35);font-style:italic;margin-top:2px">Cuando el rival ataque, aparece aquí</div>`;
-}
-
-// ── XP RESULT ─────────────────────────────────────────────────────────────────
-function showXPResult(iWon,xpResult,newProfile,disconnected){
-  const ov=document.createElement('div');ov.className='xp-overlay';
-  let h=`<div class="xp-title ${iWon?'win':'loss'}">${disconnected?'🏃 RIVAL HUYÓ':iWon?'🏆 ¡VICTORIA!':'💀 DERROTA'}</div>`;
-  if(xpResult){
-    const net=xpResult.gained;
-    h+=`<div class="xp-gained${net<0?' neg':''}">${net>=0?'+':''}${net} XP</div>`;
-    h+=`<div class="xp-breakdown">`;
-    const labels={win:'Victoria',loss:'Participación',counter_success:'Contraataque exitoso',counter_fail:'Contraataque fallido',combo:'Combo',streak_3:'🔥 Racha x3',streak_5:'🔥 Racha x5',reaction_fast:'⚡ Reacción ultra rápida',reaction_ok:'Reacción rápida'};
-    for(const item of xpResult.log){
-      h+=`<div class="xp-row"><span>${labels[item.event]||item.event}</span><span class="${item.pts>=0?'pos':'neg2'}">${item.pts>=0?'+':''}${item.pts} XP</span></div>`;
-    }
-    h+=`</div>`;
-  }
-  if(xpResult?.leveledUp&&newProfile){playSound('levelup');h+=`<div class="lvlup-banner">✨ ¡SUBISTE A ${newProfile.levelName.toUpperCase()}! ✨</div>`;}
-  if(newProfile){
-    const lm=LEVEL_META.find(l=>l.n===newProfile.level)||LEVEL_META[0];
-    const xpC=XP_THRESHOLDS[newProfile.level-1]||0;
-    const xpN=XP_THRESHOLDS[newProfile.level]||newProfile.xp;
-    const pct=newProfile.next?Math.min(100,Math.round((newProfile.xp-xpC)/(xpN-xpC)*100)):100;
-    h+=`<div class="new-xp-bar">
-      <div class="new-lvl-lbl" style="color:${lm.color}">${lm.icon} Nv.${newProfile.level} — ${newProfile.xp} XP · ${newProfile.next?newProfile.next.needed+' para '+newProfile.next.nextName:'Nivel máximo'}</div>
-      <div class="xpb-outer"><div class="xpb-inner" style="width:${pct}%"></div></div>
-    </div>`;
-    const avgRxn=newProfile.stats.avgReactionMs?(newProfile.stats.avgReactionMs/1000).toFixed(2)+'s':'—';
-    const wr=newProfile.stats.wins+newProfile.stats.losses>0?Math.round(newProfile.stats.wins/(newProfile.stats.wins+newProfile.stats.losses)*100)+'%':'—';
-    h+=`<div class="result-stats">
-      <div class="sbox"><div class="sbox-val">${newProfile.stats.wins}</div><div class="sbox-lbl">Victorias</div></div>
-      <div class="sbox"><div class="sbox-val">${wr}</div><div class="sbox-lbl">Win %</div></div>
-      <div class="sbox"><div class="sbox-val">${newProfile.streak||0}</div><div class="sbox-lbl">Racha</div></div>
-      <div class="sbox"><div class="sbox-val">${avgRxn}</div><div class="sbox-lbl">Reacción</div></div>
-    </div>`;
-  }
-  h+=`<button class="btn btn-gold" onclick="goLobby()">⚡ VOLVER AL CASTILLO</button>`;
-  ov.innerHTML=h;document.body.appendChild(ov);
-}
-function goLobby(){
-  document.querySelector('.xp-overlay')?.remove();
-  document.getElementById('game').style.display='none';
-  document.getElementById('lobby-screen').style.display='flex';
-  document.getElementById('room-btns').style.display='block';
-  document.getElementById('code-display').style.display='none';
-  musicStop();
-  G.myIndex=null;G.myHP=100;G.oppHP=100;G.myTurn=false;G.counterActive=false;
-  clearInterval(G.counterInterval);clearInterval(G.castInterval);resetCastTimer();
-  renderLobby();
-}
-
-// ── HELPERS ───────────────────────────────────────────────────────────────────
-function updateTurn(){
-  const el=document.getElementById('tind');
-  el.className=G.myTurn?'tind mine':'tind';
-  el.textContent=G.myTurn?'⚡ TU TURNO — lanza un hechizo':'Turno del rival...';
-}
-function updateBars(){
-  const ph=Math.max(0,G.myHP),eh=Math.max(0,G.oppHP);
-  document.getElementById('php').style.width=ph+'%';
-  document.getElementById('ehp').style.width=eh+'%';
-  document.getElementById('pht').textContent=ph+' / 100';
-  document.getElementById('eht').textContent=eh+' / 100';
-  musicSetDanger(ph<=30);
-}
-function addLog(msg,cls){document.getElementById('blog').innerHTML=`<div class="le ${cls}">${msg}</div>`;}
-function showSfx(icon){
-  const el=document.createElement('div');el.className='sfx';el.textContent=icon;
-  document.getElementById('arena').appendChild(el);
-  setTimeout(()=>el.remove(),900);
-}
-function reshuffleSpells(order){
-  const grid=document.getElementById('sgrid');
-  const cards=[...grid.querySelectorAll('.sc')];
-  // reorder DOM to match new shuffle
-  const bySpell={};
-  cards.forEach(c=>bySpell[c.dataset.spell]=c);
-  order.forEach(sk=>{
-    const c=bySpell[sk];
-    if(c) grid.appendChild(c);
-  });
-  // flash each card
-  cards.forEach((c,i)=>{
-    setTimeout(()=>{
-      c.style.transform='scale(0.85)';
-      setTimeout(()=>c.style.transform='',120);
-    },i*40);
-  });
-}
-
-function startCastTimer(secs, deadline){
-  clearInterval(G.castInterval);
-  const wrap=document.getElementById('cast-timer-wrap');
-  const bar=document.getElementById('cast-bar');
-  const secsTxt=document.getElementById('cast-secs');
-  const lbl=document.getElementById('cast-lbl');
-  wrap.style.display='block';
-  lbl.textContent='ELIGE TU HECHIZO';
-  bar.style.background='#e8c87a';
-  const total=secs*1000;
-  G.castInterval=setInterval(()=>{
-    const left=Math.max(0,deadline-Date.now());
-    const pct=left/total*100;
-    bar.style.width=Math.round(pct)+'%';
-    secsTxt.textContent=(left/1000).toFixed(1)+'s';
-    bar.style.background=pct>50?'#e8c87a':pct>20?'#fbbf24':'#ef4444';
-    secsTxt.style.color=pct>50?'#e8c87a':pct>20?'#fbbf24':'#ef4444';
-    if(left<=0){
-      clearInterval(G.castInterval);
-      resetCastTimer();
-    }
-  },100);
-}
-
-function resetCastTimer(){
-  const wrap=document.getElementById('cast-timer-wrap');
-  const bar=document.getElementById('cast-bar');
-  const secsTxt=document.getElementById('cast-secs');
-  wrap.style.display='none';
-  bar.style.width='100%';
-  secsTxt.textContent='4.0s';
-  secsTxt.style.color='#e8c87a';
-}
-
-
-
-// ── MUSIC ENGINE ─────────────────────────────────────────────────────────────
-let _mctx=null,_mmaster=null,_gSoft=null,_gFull=null;
-let _mplaying=false,_mDanger=false,_mLoopTO=null;
-
-function _musicInit(){
-  if(_mctx)return;
-  _mctx=new(window.AudioContext||window.webkitAudioContext)();
-  _mmaster=_mctx.createGain(); _mmaster.gain.value=0.25;
-  _gSoft=_mctx.createGain(); _gSoft.gain.value=1; _gSoft.connect(_mmaster);
-  _gFull=_mctx.createGain(); _gFull.gain.value=0.0001; _gFull.connect(_mmaster);
-  _mmaster.connect(_mctx.destination);
-}
-
-function _sq(f,dest,t,dur,v=0.28){
-  if(!f||f<=0)return;
-  const o=_mctx.createOscillator(),g=_mctx.createGain();
-  o.type='square';o.frequency.value=f;
-  g.gain.setValueAtTime(0.0001,t);
-  g.gain.linearRampToValueAtTime(v,t+0.005);
-  g.gain.setValueAtTime(v,t+dur-0.008);
-  g.gain.linearRampToValueAtTime(0.0001,t+dur);
-  o.connect(g);g.connect(dest);o.start(t);o.stop(t+dur+0.02);
-}
-function _tr(f,dest,t,dur,v=0.32){
-  if(!f||f<=0)return;
-  const o=_mctx.createOscillator(),g=_mctx.createGain();
-  o.type='triangle';o.frequency.value=f;
-  g.gain.setValueAtTime(0.0001,t);
-  g.gain.linearRampToValueAtTime(v,t+0.008);
-  g.gain.setValueAtTime(v,t+dur-0.01);
-  g.gain.linearRampToValueAtTime(0.0001,t+dur);
-  o.connect(g);g.connect(dest);o.start(t);o.stop(t+dur+0.02);
-}
-function _kk(dest,t,v=0.32){
-  const o=_mctx.createOscillator(),g=_mctx.createGain();
-  o.type='square';
-  o.frequency.setValueAtTime(150,t);
-  o.frequency.exponentialRampToValueAtTime(40,t+0.08);
-  g.gain.setValueAtTime(v,t);g.gain.setTargetAtTime(0.0001,t,0.04);
-  o.connect(g);g.connect(dest);o.start(t);o.stop(t+0.2);
-}
-function _hh(dest,t,v=0.055){
-  const len=Math.ceil(_mctx.sampleRate*0.035);
-  const buf=_mctx.createBuffer(1,len,_mctx.sampleRate);
-  const d=buf.getChannelData(0);for(let i=0;i<len;i++)d[i]=Math.random()*2-1;
-  const src=_mctx.createBufferSource();src.buffer=buf;
-  const g=_mctx.createGain(),hp=_mctx.createBiquadFilter();
-  hp.type='highpass';hp.frequency.value=8000;
-  g.gain.setValueAtTime(v,t);g.gain.setTargetAtTime(0.0001,t,0.012);
-  src.connect(hp);hp.connect(g);g.connect(dest);src.start(t);src.stop(t+0.05);
-}
-
-function _scheduleSoft(st){
-  const B=60/160;
-  [220,220,220,220,196,196,196,196,
-   175,175,175,175,147,147,147,147,
-   175,175,196,196,220,220,247,247,
-   220,220,196,196,175,175,220,220].forEach((f,i)=>_tr(f,_gSoft,st+i*B,B*0.88,0.26));
-  const harm=[
-    659,0,659,0,784,659,0,587,0,587,659,587,
-    523,0,523,659,523,0,440,0,392,0,330,0,
-    392,440,523,587,659,0,587,523,440,392,330,294,
-    330,392,440,523,587,659,587,659,784,0,659,0,
-  ];
-  harm.forEach((f,i)=>_sq(f,_gSoft,st+i*B*0.5,B*0.42,0.09));
-  return B*32;
-}
-
-function _scheduleFull(st){
-  const B=60/160;
-  const mel=[
-    880,0,880,0,1047,880,0,784,0,784,880,784,
-    659,0,659,784,659,0,587,0,523,0,440,0,
-    523,587,659,784,880,0,784,659,587,523,440,392,
-    440,523,587,659,784,880,784,880,1047,0,880,0,
-  ];
-  mel.forEach((f,i)=>_sq(f,_gFull,st+i*B*0.5,B*0.44,0.27));
-  const harm=[
-    659,0,659,0,784,659,0,587,0,587,659,587,
-    523,0,523,659,523,0,440,0,392,0,330,0,
-    392,440,523,587,659,0,587,523,440,392,330,294,
-    330,392,440,523,587,659,587,659,784,0,659,0,
-  ];
-  harm.forEach((f,i)=>_sq(f,_gFull,st+i*B*0.5,B*0.42,0.16));
-  [220,220,220,220,196,196,196,196,
-   175,175,175,175,147,147,147,147,
-   175,175,196,196,220,220,247,247,
-   220,220,196,196,175,175,220,220].forEach((f,i)=>_tr(f,_gFull,st+i*B,B*0.88,0.30));
-  for(let i=0;i<16;i++){
-    _kk(_gFull,st+i*B,0.26);
-    if(i%2===1)_kk(_gFull,st+i*B,0.13);
-    _hh(_gFull,st+i*B*0.5,0.055);
-  }
-  return B*32;
-}
-
-function _musicTick(){
-  if(!_mplaying)return;
-  const t=_mctx.currentTime+0.05;
-  const dur=_scheduleSoft(t);
-  _scheduleFull(t);
-  _mLoopTO=setTimeout(_musicTick,(dur-0.15)*1000);
-}
-
-function musicStart(){
-  try{
-    _musicInit();
-    if(_mctx.state==='suspended')_mctx.resume();
-    if(_mplaying)return;
-    _mplaying=true;
-    _mDanger=false;
-    _gSoft.gain.cancelScheduledValues(_mctx.currentTime);
-    _gFull.gain.cancelScheduledValues(_mctx.currentTime);
-    _gSoft.gain.setValueAtTime(1,_mctx.currentTime);
-    _gFull.gain.setValueAtTime(0.0001,_mctx.currentTime);
-    _musicTick();
-  }catch(e){console.warn('music error',e);}
-}
-
-function musicStop(immediate=false){
-  try{
-    _mplaying=false;
-    _mDanger=false;
-    clearTimeout(_mLoopTO);
-    if(_mctx){
-      const t=_mctx.currentTime;
-      const fadeTime = immediate ? 0.1 : 0.6;
-      _mmaster.gain.cancelScheduledValues(t);
-      _mmaster.gain.setValueAtTime(_mmaster.gain.value, t);
-      _mmaster.gain.linearRampToValueAtTime(0.0001, t+fadeTime);
-      setTimeout(()=>{
-        if(_mmaster) _mmaster.gain.setValueAtTime(0.25, _mctx.currentTime);
-      }, (fadeTime+0.1)*1000);
-    }
-  }catch(e){}
-}
-
-function musicSetDanger(danger){
-  try{
-    if(!_mctx||!_mplaying)return;
-    if(danger===_mDanger)return;
-    _mDanger=danger;
-    const t=_mctx.currentTime;
-    const FADE=3.0; // 3 second smooth crossfade
-    if(danger){
-      // soft → full: gradual over 3s with slight curve
-      _gSoft.gain.cancelScheduledValues(t);
-      _gFull.gain.cancelScheduledValues(t);
-      // use multiple intermediate points for smoother curve
-      _gSoft.gain.setValueAtTime(_gSoft.gain.value,t);
-      _gSoft.gain.linearRampToValueAtTime(0.6,t+FADE*0.3);
-      _gSoft.gain.linearRampToValueAtTime(0.2,t+FADE*0.6);
-      _gSoft.gain.linearRampToValueAtTime(0.0001,t+FADE);
-      _gFull.gain.setValueAtTime(_gFull.gain.value,t);
-      _gFull.gain.linearRampToValueAtTime(0.3,t+FADE*0.3);
-      _gFull.gain.linearRampToValueAtTime(0.7,t+FADE*0.6);
-      _gFull.gain.linearRampToValueAtTime(1.0,t+FADE);
-    } else {
-      // full → soft: same smooth curve back
-      _gFull.gain.cancelScheduledValues(t);
-      _gSoft.gain.cancelScheduledValues(t);
-      _gFull.gain.setValueAtTime(_gFull.gain.value,t);
-      _gFull.gain.linearRampToValueAtTime(0.7,t+FADE*0.3);
-      _gFull.gain.linearRampToValueAtTime(0.3,t+FADE*0.6);
-      _gFull.gain.linearRampToValueAtTime(0.0001,t+FADE);
-      _gSoft.gain.setValueAtTime(_gSoft.gain.value,t);
-      _gSoft.gain.linearRampToValueAtTime(0.3,t+FADE*0.3);
-      _gSoft.gain.linearRampToValueAtTime(0.7,t+FADE*0.6);
-      _gSoft.gain.linearRampToValueAtTime(1.0,t+FADE);
-    }
-  }catch(e){}
-}
-// ── END MUSIC ENGINE ──────────────────────────────────────────────────────────
-
-// ── AUDIO ENGINE ─────────────────────────────────────────────────────────────
-let _ctx=null,_master=null;
-
-function _initAudio(){
-  if(_ctx)return;
-  _ctx=new(window.AudioContext||window.webkitAudioContext)();
-  _master=_ctx.createGain();
-  _master.gain.value=0.75;
-  _master.connect(_ctx.destination);
-}
-
-function _rev(dur,decay){
-  const len=Math.ceil(_ctx.sampleRate*dur);
-  const buf=_ctx.createBuffer(2,len,_ctx.sampleRate);
-  for(let c=0;c<2;c++){const d=buf.getChannelData(c);for(let i=0;i<len;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/len,decay);}
-  const conv=_ctx.createConvolver();conv.buffer=buf;return conv;
-}
-
-function _env(g,t,attack,peak,decay){
-  g.gain.setValueAtTime(0.0001,t);
-  g.gain.linearRampToValueAtTime(peak,t+attack);
-  g.gain.setTargetAtTime(0.0001,t+attack,decay);
-}
-
-function _osc(type,freq,dest,t,attack,peak,decay){
-  const o=_ctx.createOscillator(),g=_ctx.createGain();
-  o.type=type;o.frequency.value=freq;
-  _env(g,t,attack,peak,decay);
-  o.connect(g);g.connect(dest);o.start(t);o.stop(t+attack+decay*6);
-}
-
-function _slide(type,f0,f1,dest,t,dur,peak){
-  const o=_ctx.createOscillator(),g=_ctx.createGain();
-  o.type=type;
-  o.frequency.setValueAtTime(f0,t);
-  o.frequency.exponentialRampToValueAtTime(Math.max(f1,1),t+dur);
-  _env(g,t,0.02,peak,dur*0.5);
-  o.connect(g);g.connect(dest);o.start(t);o.stop(t+dur+0.2);
-}
-
-function _noise(dest,t,dur,peak,hp=2000){
-  const len=Math.ceil(_ctx.sampleRate*dur);
-  const buf=_ctx.createBuffer(1,len,_ctx.sampleRate);
-  const d=buf.getChannelData(0);for(let i=0;i<len;i++)d[i]=Math.random()*2-1;
-  const src=_ctx.createBufferSource();src.buffer=buf;
-  const g=_ctx.createGain(),f=_ctx.createBiquadFilter();
-  f.type='highpass';f.frequency.value=hp;
-  g.gain.setValueAtTime(peak,t);g.gain.setTargetAtTime(0.0001,t,dur*0.15);
-  src.connect(f);f.connect(g);g.connect(dest);
-  src.start(t);src.stop(t+dur+0.05);
-}
-
-function _bell(dest,t,freq,peak,decay){
-  [{m:1.0,g:peak,d:decay},{m:2.76,g:peak*.5,d:decay*.5},{m:5.4,g:peak*.2,d:decay*.3}].forEach(p=>{
-    const o=_ctx.createOscillator(),g=_ctx.createGain();
-    o.type='sine';o.frequency.value=freq*p.m;
-    g.gain.setValueAtTime(0.0001,t);
-    g.gain.linearRampToValueAtTime(p.g,t+0.002);
-    g.gain.setTargetAtTime(0.0001,t+0.003,p.d);
-    o.connect(g);g.connect(dest);o.start(t);o.stop(t+decay*5+0.1);
-  });
-}
-
-function playSound(name){
-  try{
-    _initAudio();
-    if(_ctx.state==='suspended')_ctx.resume();
-    const t=_ctx.currentTime;
-    const SFX={
-      stupefy(){
-        const r=_rev(0.8,3);r.connect(_master);
-        _slide('sawtooth',200,1800,r,t,0.15,0.4);
-        _slide('square',150,900,r,t,0.2,0.3);
-        _noise(r,t+0.05,0.12,0.3);
-      },
-      expelliarmus(){
-        const r=_rev(1.0,2.5);r.connect(_master);
-        _slide('sine',1200,300,r,t,0.35,0.5);
-        _slide('triangle',800,200,r,t+0.05,0.4,0.3);
-        _noise(r,t,0.08,0.2);
-      },
-      avada(){
-        const r=_rev(2.0,1.5);r.connect(_master);
-        _slide('sawtooth',80,40,r,t,0.8,0.6);
-        _slide('sawtooth',160,80,r,t,0.8,0.4);
-        _slide('sine',1600,400,r,t+0.1,0.6,0.3);
-        _noise(r,t+0.05,0.4,0.25);
-      },
-      crucio(){
-        const r=_rev(1.2,2);r.connect(_master);
-        _slide('sawtooth',440,380,r,t,0.5,0.4);
-        _slide('sawtooth',453,390,r,t,0.5,0.35);
-        _slide('square',220,180,r,t+0.1,0.6,0.3);
-      },
-      protego(){
-        const r=_rev(1.5,2);r.connect(_master);
-        [523,659,784,1047].forEach((f,i)=>_osc('sine',f,r,t+i*0.04,0.01,0.35,0.4));
-      },
-      counter(){
-        const r=_rev(1.2,2.5);r.connect(_master);
-        [523,784].forEach((f,i)=>_osc('sine',f,r,t+i*0.03,0.01,0.4,0.3));
-        setTimeout(()=>{
-          const t2=_ctx.currentTime;
-          _slide('sawtooth',400,1200,r,t2,0.2,0.5);
-          _noise(r,t2,0.08,0.25);
-        },200);
-      },
-      lumos(){
-        const r=_rev(2.0,2);r.connect(_master);
-        [261,329,392,523,659].forEach((f,i)=>_osc('sine',f,r,t+i*0.06,0.02,0.28-i*0.02,0.6));
-        _slide('triangle',500,1000,r,t,0.8,0.2);
-      },
-      aguamenti(){
-        const r=_rev(1.5,2);r.connect(_master);
-        [261,329,392,523].forEach((f,i)=>_osc('sine',f,r,t+i*0.06,0.02,0.28,0.5));
-        _noise(r,t,0.3,0.15,500);
-      },
-      confundo(){
-        const r=_rev(1.2,2);r.connect(_master);
-        _slide('sawtooth',300,600,r,t,0.3,0.3);
-        _slide('sawtooth',310,580,r,t,0.3,0.25);
-        _osc('sine',150,r,t,0.05,0.3,0.4);
-      },
-      sectum(){
-        const r=_rev(0.8,3);r.connect(_master);
-        _slide('sawtooth',800,200,r,t,0.25,0.5);
-        _noise(r,t,0.2,0.4,1500);
-      },
-      hit(){
-        const r=_rev(0.5,3);r.connect(_master);
-        _slide('sine',120,40,r,t,0.25,0.7);
-        _noise(r,t,0.06,0.4,500);
-      },
-      shield_hit(){
-        const r=_rev(0.8,2.5);r.connect(_master);
-        [523,659,784].forEach((f,i)=>_osc('sine',f,r,t+i*0.03,0.01,0.4,0.35));
-        _noise(r,t,0.04,0.2,3000);
-      },
-      timeout(){
-        const r=_rev(0.6,3);r.connect(_master);
-        _bell(r,t,440,0.9,0.12);
-        _noise(r,t,0.015,0.3,2000);
-      },
-      victory(){
-        const r=_rev(2.0,1.5);r.connect(_master);
-        const notes=[523,659,784,1047,784,1047,1319];
-        const times=[0,0.12,0.24,0.36,0.52,0.60,0.72];
-        notes.forEach((f,i)=>{
-          _osc('triangle',f,r,t+times[i],0.01,0.5,0.18);
-          _osc('sine',f*2,r,t+times[i],0.01,0.15,0.15);
-        });
-      },
-      defeat(){
-        const r=_rev(2.5,1.2);r.connect(_master);
-        [392,349,311,261,233,196].forEach((f,i)=>{
-          _osc('sawtooth',f,r,t+i*0.18,0.02,0.4,0.3);
-          _osc('sine',f*0.5,r,t+i*0.18,0.02,0.2,0.4);
-        });
-      },
-      levelup(){
-        const r=_rev(2.0,1.8);r.connect(_master);
-        [261,329,392,523,659,784,1047,1319].forEach((f,i)=>{
-          _osc('sine',f,r,t+i*0.07,0.01,0.4,0.3);
-          _osc('triangle',f*2,r,t+i*0.07,0.01,0.15,0.2);
-        });
-      },
-    };
-    if(SFX[name])SFX[name]();
-  }catch(e){console.warn('audio error',e);}
-}
-// ── END AUDIO ENGINE ──────────────────────────────────────────────────────────
-
-function openAvatarModal(){
-  if(document.getElementById('av-modal')) return;
-  const current=G.profile?.avatar||'🧙';
-  const modal=document.createElement('div');
-  modal.className='av-modal-bg'; modal.id='av-modal';
-  modal.innerHTML=`
-    <div class="av-modal">
-      <div class="av-modal-title">✨ CAMBIAR AVATAR</div>
-      <div class="av-modal-sub">Elige tu nuevo personaje</div>
-      <div class="av-modal-grid" id="av-modal-grid"></div>
-      <button class="btn btn-gold" id="av-save-btn" onclick="saveAvatar()" style="margin-bottom:8px">GUARDAR</button>
-      <button class="btn btn-ghost" onclick="closeAvatarModal()" style="min-height:44px;font-size:11px">CANCELAR</button>
-    </div>`;
-  document.body.appendChild(modal);
-  let tempAv=current;
-  const grid=document.getElementById('av-modal-grid');
-  grid.innerHTML=AVATARS.map(a=>`
-    <div class="av-opt${a.icon===current?' sel':''}" onclick="tempPickAv('${a.icon}',this)">
-      <div class="av-opt-icon">${a.icon}</div>
-      <div class="av-opt-name">${a.name.toUpperCase()}</div>
-    </div>`).join('');
-  window._tempAv=current;
-}
-
-function tempPickAv(icon,el){
-  window._tempAv=icon;
-  document.querySelectorAll('.av-opt').forEach(d=>d.classList.remove('sel'));
-  el.classList.add('sel');
-}
-
-function saveAvatar(){
-  const av=window._tempAv||G.profile?.avatar||'🧙';
-  const btn=document.getElementById('av-save-btn');
-  if(btn){btn.textContent='GUARDANDO...';btn.disabled=true;}
-  socket.emit('update_avatar',{avatar:av});
-}
-
-function closeAvatarModal(){
-  document.getElementById('av-modal')?.remove();
-}
-
-socket.on('avatar_updated',profile=>{
-  G.profile=profile;
-  closeAvatarModal();
-  renderLobby();
-  setLobbyMsg('¡Avatar actualizado!','ok');
-  setTimeout(()=>setLobbyMsg('',''),2000);
-});
-
-// Map new Spanish spell keys to audio engine sound names
-function spellSoundKey(sk){
+function rowToProfile(row) {
   return {
-    aturdir:'stupefy', expulsar:'expelliarmus', sanar:'lumos', escudo:'protego',
-    destruir:'avada',  quemar:'crucio',         restaurar:'aguamenti',
-    confundir:'confundo', desgarrar:'sectum',
-  }[sk] || sk;
+    username: row.username, passwordHash: row.password_hash,
+    avatar: row.avatar || '🧙',
+    xp: row.xp, level: row.level, streak: row.streak, lastWin: row.last_win,
+    stats: {
+      wins: row.wins, losses: row.losses,
+      countersSuccess: row.counters_ok, countersFail: row.counters_fail,
+      combos: row.combos, totalReactionMs: row.total_rxn_ms, reactionSamples: row.rxn_samples,
+    },
+  };
 }
 
-function isVoice(){return !!(window.SpeechRecognition||window.webkitSpeechRecognition);}
-</script>
-</body>
-</html>
+function saveProfile(p) {
+  stmts.updateProfile({
+    username: p.username, xp: p.xp, level: p.level,
+    streak: p.streak || 0, last_win: p.lastWin || null,
+    wins: p.stats.wins, losses: p.stats.losses,
+    counters_ok: p.stats.countersSuccess, counters_fail: p.stats.countersFail,
+    combos: p.stats.combos, total_rxn_ms: p.stats.totalReactionMs,
+    rxn_samples: p.stats.reactionSamples,
+  });
+}
+
+// rooms are still ephemeral (in-memory) — they only last one match
+const rooms = {};
+// track which username created which room, so reconnects can reclaim it
+const roomByUser = {}; // username -> code
+// track active sessions so socket reconnects can restore state without re-login
+const sessionByUser = {}; // username -> { profile snapshot }
+
+// ─── XP & LEVEL CONFIG ────────────────────────────────────────────────────────
+const LEVELS = [
+  { n: 1, name: 'Novato',    xpRequired: 0,    counterSecs: 2.0 },
+  { n: 2, name: 'Aprendiz',  xpRequired: 100,  counterSecs: 2.5 },
+  { n: 3, name: 'Iniciado',  xpRequired: 300,  counterSecs: 3.0 },
+  { n: 4, name: 'Experto',   xpRequired: 700,  counterSecs: 3.5 },
+  { n: 5, name: 'Maestro',   xpRequired: 1500, counterSecs: 4.5 },
+];
+
+// XP awarded per match event
+const XP_TABLE = {
+  win:             50,
+  loss:            10,   // participation points
+  counter_success: 8,
+  counter_fail:   -2,
+  combo:           5,
+  streak_3:       25,   // bonus for 3-win streak
+  streak_5:       60,
+  reaction_fast:  10,   // avg reaction < 1.2s
+  reaction_ok:     4,   // avg reaction < 2.0s
+};
+
+function calcLevel(xp) {
+  let lvl = LEVELS[0];
+  for (const l of LEVELS) { if (xp >= l.xpRequired) lvl = l; }
+  return lvl;
+}
+
+function xpToNextLevel(xp) {
+  const current = calcLevel(xp);
+  const next = LEVELS.find(l => l.n === current.n + 1);
+  if (!next) return null;
+  return { needed: next.xpRequired - xp, nextName: next.name, nextXp: next.xpRequired };
+}
+
+function awardXP(profile, events) {
+  let gained = 0;
+  const log = [];
+
+  for (const ev of events) {
+    const pts = XP_TABLE[ev] || 0;
+    if (pts !== 0) { gained += pts; log.push({ event: ev, pts }); }
+  }
+
+  profile.xp = Math.max(0, profile.xp + gained);
+  const newLevel = calcLevel(profile.xp);
+  const leveledUp = newLevel.n > profile.level;
+  profile.level = newLevel.n;
+
+  return { gained, log, leveledUp, newLevel };
+}
+
+// ─── SPELL DATA (server-authoritative) ────────────────────────────────────────
+const PATH_MULTS = {
+  destructor: { dmg: 1.3, heal: 1.0 },
+  guardian:   { dmg: 0.9, heal: 1.6 },
+  trickster:  { dmg: 1.1, heal: 1.0 },
+};
+const SPELLS = {
+  // básicos — clic y voz
+  aturdir:   { dmg: 25, heal: 0 },
+  expulsar:  { dmg: 20, heal: 0 },
+  sanar:     { dmg: 0,  heal: 20 },
+  escudo:    { dmg: 0,  heal: 0,  shield: true },
+  // poderosos — solo voz
+  destruir:  { dmg: 45, heal: 0 },
+  quemar:    { dmg: 35, heal: 0 },
+  restaurar: { dmg: 0,  heal: 30 },
+  confundir: { dmg: 15, heal: 0,  stun: true },
+  desgarrar: { dmg: 40, heal: 0 },
+};
+const CAST_SECS = 4; // fixed time to choose a spell each turn
+
+const COUNTER_PHRASES = [
+  '¡Esquiva!','¡Refleja!','¡Barrera!','¡Detente!',
+  '¡Bloquea!','¡Para!','¡Escudo!','¡Protege!',
+  '¡Rebota!','¡Desvía!','¡Frena!','¡Cúbrete!',
+  '¡Resiste!','¡Aguanta!','¡Rechaza!','¡Deflecta!',
+];
+
+// Also send keywords so client can match voice loosely
+const COUNTER_KEYWORDS = {
+  '¡Esquiva!':  ['esquiva','esquivar','esquivo'],
+  '¡Refleja!':  ['refleja','reflejar','reflejo'],
+  '¡Barrera!':  ['barrera','barre','barreras'],
+  '¡Detente!':  ['detente','detener','detén','deten'],
+  '¡Bloquea!':  ['bloquea','bloquear','bloqueo','bloqué'],
+  '¡Para!':     ['para','parar','párate','parate'],
+  '¡Escudo!':   ['escudo','escudos','escudar'],
+  '¡Protege!':  ['protege','proteger','protejo'],
+  '¡Rebota!':   ['rebota','rebotar','rebote'],
+  '¡Desvía!':   ['desvía','desvia','desviar','desvío'],
+  '¡Frena!':    ['frena','frenar','freno'],
+  '¡Cúbrete!':  ['cúbrete','cubrete','cubrirse','cubre'],
+  '¡Resiste!':  ['resiste','resistir','resisto'],
+  '¡Aguanta!':  ['aguanta','aguantar','aguanto'],
+  '¡Rechaza!':  ['rechaza','rechazar','rechazo'],
+  '¡Deflecta!': ['deflecta','deflectar','deflecto','defleja'],
+};
+
+function makeCode() { return Math.random().toString(36).substring(2,6).toUpperCase(); }
+
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function makeRoomState() {
+  return {
+    players: [
+      { hp:100, shield:false, stun:false, path:null, username:null,
+        countersOk:0, countersFail:0, combos:0, reactionTimes:[], spellCastAt:0 },
+      { hp:100, shield:false, stun:false, path:null, username:null,
+        countersOk:0, countersFail:0, combos:0, reactionTimes:[], spellCastAt:0 },
+    ],
+    turn: 0,
+    phase: 'battle',
+    counterFor: null, counterDmg: 0, counterPhrase: '', counterDeadline: 0,
+    castDeadline: 0,
+  };
+}
+
+// Emit turn_change with a fresh shuffled spell order and cast deadline
+function emitTurnChange(code, room, io) {
+  if (!rooms[code]) return; // room may have been deleted
+  const pi = room.state.turn;
+  if (!room.sockets[pi]) return; // player offline, skip until reconnect
+  const playerPath = room.state.players[pi].path;
+  const PATH_SPELLS = {
+    destructor: ['aturdir','destruir','expulsar','quemar'],
+    guardian:   ['escudo','sanar','expulsar','restaurar'],
+    trickster:  ['confundir','expulsar','aturdir','desgarrar'],
+  };
+  const spells = PATH_SPELLS[playerPath] || PATH_SPELLS.destructor;
+  const spellOrder = shuffle(spells);
+  const deadline = Date.now() + CAST_SECS * 1000;
+  room.state.castDeadline = deadline;
+
+  io.to(code).emit('turn_change', {
+    turn: pi,
+    spellOrder,       // shuffled order for the attacker to see
+    castSecs: CAST_SECS,
+    castDeadline: deadline,
+  });
+
+  // Auto-skip if attacker doesn't cast in time
+  setTimeout(() => {
+    if (room.state.phase === 'battle' && room.state.turn === pi && room.state.castDeadline === deadline) {
+      const ti = pi === 0 ? 1 : 0;
+      room.state.turn = ti;
+      io.to(code).emit('turn_skipped', { skipped: pi });
+      emitTurnChange(code, room, io);
+    }
+  }, (CAST_SECS + 0.5) * 1000);
+}
+
+// ─── AUTH ─────────────────────────────────────────────────────────────────────
+io.on('connection', socket => {
+  console.log('connected:', socket.id);
+
+  socket.on('register', async ({ username, password, avatar }) => {
+    if (!db) { socket.emit('auth_error', { msg: 'Servidor iniciando, intenta en unos segundos' }); return; }
+    const u = username.trim().toLowerCase();
+    if (!u || u.length < 2 || u.length > 20) {
+      socket.emit('auth_error', { msg: 'Nombre: 2–20 caracteres' }); return;
+    }
+    if (!password || password.length < 3) {
+      socket.emit('auth_error', { msg: 'Contraseña: mínimo 3 caracteres' }); return;
+    }
+    if (stmts.findUser(u)) {
+      socket.emit('auth_error', { msg: 'Ese nombre ya existe — inicia sesión' }); return;
+    }
+    const hash = await bcrypt.hash(password, 8);
+    const av = avatar && avatar.length <= 8 ? avatar : '🧙';
+    stmts.insertUser({ username: u, password_hash: hash, avatar: av });
+    const profile = rowToProfile(stmts.findUser(u));
+    socket.username = u;
+    socket.emit('auth_ok', publicProfile(profile));
+    console.log('registered:', u);
+  });
+
+  socket.on('login', async ({ username, password }) => {
+    if (!db) { socket.emit('auth_error', { msg: 'Servidor iniciando, intenta en unos segundos' }); return; }
+    const u = username.trim().toLowerCase();
+    console.log(`[${INSTANCE_ID}] login attempt for: ${u}`);
+    const row = stmts.findUser(u);
+    console.log(`[${INSTANCE_ID}] user found:`, !!row);
+    if (!row) { socket.emit('auth_error', { msg: 'Usuario no encontrado' }); return; }
+    const ok = await bcrypt.compare(password, row.password_hash);
+    if (!ok) { socket.emit('auth_error', { msg: 'Contraseña incorrecta' }); return; }
+    socket.username = u;
+    sessionByUser[u] = true;
+    // restore room membership if user reconnects while waiting
+    const pendingCode = roomByUser[u];
+    if (pendingCode && rooms[pendingCode] && rooms[pendingCode].sockets[1] === null) {
+      const room = rooms[pendingCode];
+      // cancel pending delete timeout
+      if (room._deleteTO) {
+        clearTimeout(room._deleteTO);
+        room._deleteTO = null;
+        console.log(`[${INSTANCE_ID}] Cancelled delete timeout for room ${pendingCode} on login`);
+      }
+      room.sockets[0] = socket;
+      socket.roomCode = pendingCode;
+      socket.playerIndex = 0;
+      socket.join(pendingCode);
+      console.log(`[${INSTANCE_ID}] Restored ${u} to room ${pendingCode} after login`);
+    }
+    socket.emit('auth_ok', publicProfile(rowToProfile(row)));
+    console.log('login:', u);
+  });
+
+  // ─── RECONNECT ─────────────────────────────────────────────────────────────
+  // Called by client when socket reconnects but user already has a local session
+  socket.on('reconnect_session', ({ username }) => {
+    if (!username) return;
+    const u = username.trim().toLowerCase();
+    const row = stmts.findUser(u);
+    if (!row) { socket.emit('session_invalid'); return; }
+    socket.username = u;
+    sessionByUser[u] = true;
+    // restore room if waiting
+    const pendingCode = roomByUser[u];
+    if (pendingCode && rooms[pendingCode]) {
+      const room = rooms[pendingCode];
+      const pi = room.state.players.findIndex(p => p.username === u);
+      if (pi >= 0) {
+        // cancel pending delete timeout
+        if (room._deleteTO) {
+          clearTimeout(room._deleteTO);
+          room._deleteTO = null;
+          console.log(`[${INSTANCE_ID}] Cancelled delete timeout for room ${pendingCode}`);
+        }
+        room.sockets[pi] = socket;
+        socket.roomCode = pendingCode;
+        socket.playerIndex = pi;
+        socket.join(pendingCode);
+        console.log(`[${INSTANCE_ID}] Session restored for ${u} in room ${pendingCode} player ${pi}`);
+        // cancel any pending delete
+        if (room._deleteTO) { clearTimeout(room._deleteTO); room._deleteTO = null; }
+        // notify opponent that player is back
+        const oppIdx = pi === 0 ? 1 : 0;
+        if (room.sockets[oppIdx]) {
+          room.sockets[oppIdx].emit('opponent_reconnected');
+        }
+        // if duel was in progress, send state to reconnected player
+        if (room.sockets[0] && room.sockets[1]) {
+          const p0row = stmts.findUser(room.state.players[0].username);
+          const p1row = stmts.findUser(room.state.players[1].username);
+          const p0 = p0row ? rowToProfile(p0row) : null;
+          const p1 = p1row ? rowToProfile(p1row) : null;
+          socket.emit('session_restored', {
+            profile: publicProfile(row),
+            inDuel: room.state.phase !== 'gameover',
+            yourIndex: pi,
+            yourLevel: calcLevel(rowToProfile(row).xp).n,
+            oppLevel: calcLevel((pi===0?p1:p0)?.xp||0).n,
+            oppName: room.state.players[pi===0?1:0].username,
+            oppAvatar: (pi===0?p1:p0)?.avatar || '🧙',
+            state: room.state,
+          });
+          return;
+        }
+      }
+    }
+    // no active room — just restore profile
+    socket.emit('session_restored', { profile: publicProfile(rowToProfile(row)), inDuel: false });
+  });
+
+  socket.on('update_avatar', ({ avatar }) => {
+    if (!socket.username) { socket.emit('error', { msg: 'Inicia sesión primero' }); return; }
+    const valid = ['🧙','🧙‍♀️','🧝','🧝‍♀️','👸','🤴','🧚','🐱','👹','🧟','🐲','🦉'];
+    const av = valid.includes(avatar) ? avatar : '🧙';
+    stmts.updateAvatar(socket.username, av);
+    const row = stmts.findUser(socket.username);
+    socket.emit('avatar_updated', publicProfile(rowToProfile(row)));
+  });
+
+  // ─── LOBBY ────────────────────────────────────────────────────────────────
+  socket.on('create_room', ({ path }) => {
+    if (!socket.username) { socket.emit('error', { msg: 'Inicia sesión primero' }); return; }
+    const row = stmts.findUser(socket.username);
+    const profile = row ? rowToProfile(row) : null;
+    if (!profile) { socket.emit('error', { msg: 'Perfil no encontrado' }); return; }
+    const level = calcLevel(profile.xp);
+    const code = makeCode();  // already uppercase
+    const state = makeRoomState();
+    state.players[0].path = path;
+    state.players[0].username = socket.username;
+    // clear any old room for this user before creating new one
+    const oldCode = roomByUser[socket.username];
+    if (oldCode && rooms[oldCode]) {
+      clearTimeout(rooms[oldCode]._deleteTO);
+      deleteRoom(oldCode);
+    }
+    rooms[code] = { sockets: [socket, null], state };
+    socket.join(code);
+    socket.roomCode = code;
+    socket.playerIndex = 0;
+    roomByUser[socket.username] = code;
+    console.log(`[${INSTANCE_ID}] room created: ${code} | total rooms: ${Object.keys(rooms).length}`);
+    socket.emit('room_created', { code, level: level.n });
+  });
+
+  socket.on('join_room', ({ code, path }) => {
+    if (!socket.username) { socket.emit('error', { msg: 'Inicia sesión primero' }); return; }
+    const normalCode = (code || '').trim().toUpperCase();
+    console.log(`[${INSTANCE_ID}] join attempt: ${normalCode} | existing rooms:`, Object.keys(rooms));
+    const room = rooms[normalCode];
+    if (!room) {
+      console.log(`[${INSTANCE_ID}] Room ${normalCode} NOT FOUND — this may be a multi-instance issue`);
+      socket.emit('error', { msg: `Sala no encontrada (${normalCode}) — verifica el código` });
+      return;
+    }
+    if (room.sockets[1]) { socket.emit('error', { msg: 'Sala llena' }); return; }
+
+    const r1 = stmts.findUser(socket.username);
+    const r0 = stmts.findUser(room.state.players[0].username);
+    const p1 = r1 ? rowToProfile(r1) : null;
+    const p0 = r0 ? rowToProfile(r0) : null;
+
+    // clear any pending room the joiner had
+    const joinerOldCode = roomByUser[socket.username];
+    if (joinerOldCode && joinerOldCode !== normalCode && rooms[joinerOldCode]) {
+      clearTimeout(rooms[joinerOldCode]._deleteTO);
+      deleteRoom(joinerOldCode);
+    }
+    room.sockets[1] = socket;
+    room.state.players[1].path = path;
+    room.state.players[1].username = socket.username;
+    socket.join(code.toUpperCase());
+    socket.roomCode = code.toUpperCase();
+    socket.playerIndex = 1;
+
+    // Kick off first turn timer
+    emitTurnChange(code, room, io);
+
+    // Send each player their own index + opponent info
+    // Guard against null sockets (player may have briefly disconnected while waiting)
+    if (room.sockets[0]) {
+      room.sockets[0].emit('duel_start', {
+        yourIndex: 0,
+        yourLevel: calcLevel(p0.xp).n,
+        oppLevel: calcLevel(p1.xp).n,
+        oppName: socket.username,
+        oppAvatar: p1 ? (p1.avatar||'🧙‍♀️') : '🧙‍♀️',
+        state: room.state,
+      });
+    } else {
+      // Player 0 disconnected — they'll receive duel_start when they reconnect
+      console.log(`[${INSTANCE_ID}] Player 0 offline when duel started in room ${code} — will receive on reconnect`);
+    }
+    if (room.sockets[1]) {
+      room.sockets[1].emit('duel_start', {
+        yourIndex: 1,
+        yourLevel: calcLevel(p1.xp).n,
+        oppLevel: calcLevel(p0.xp).n,
+        oppName: room.state.players[0].username,
+        oppAvatar: p0 ? (p0.avatar||'🧙') : '🧙',
+        state: room.state,
+      });
+    }
+  });
+
+  // ─── COMBAT ───────────────────────────────────────────────────────────────
+  socket.on('cast_spell', ({ spell }) => {
+    const code = socket.roomCode;
+    const room = rooms[code];
+    if (!room || room.state.phase !== 'battle') return;
+    const pi = socket.playerIndex;
+    const ti = pi === 0 ? 1 : 0;
+    if (room.state.turn !== pi) { socket.emit('not_your_turn'); return; }
+
+    const s = SPELLS[spell];
+    if (!s) return;
+    const mults = PATH_MULTS[room.state.players[pi].path] || { dmg:1, heal:1 };
+
+    // Record cast time for reaction tracking
+    room.state.players[pi].spellCastAt = Date.now();
+
+    if (s.shield) {
+      room.state.players[pi].shield = true;
+      io.to(code).emit('spell_result', { caster:pi, spell, effect:'shield' });
+      room.state.turn = ti;
+      emitTurnChange(code, room, io);
+      return;
+    }
+    if (s.stun) {
+      let dmg = Math.round(s.dmg * mults.dmg);
+      if (room.state.players[ti].shield) { dmg = Math.floor(dmg*.5); room.state.players[ti].shield = false; }
+      room.state.players[ti].hp = Math.max(0, room.state.players[ti].hp - dmg);
+      room.state.players[ti].stun = true;
+      io.to(code).emit('spell_result', { caster:pi, spell, effect:'stun', dmg });
+      checkWin(code, room); if (room.state.phase !== 'gameover') { room.state.turn = ti; emitTurnChange(code, room, io); }
+      return;
+    }
+    if (s.heal > 0) {
+      const h = Math.round(s.heal * mults.heal);
+      room.state.players[pi].hp = Math.min(100, room.state.players[pi].hp + h);
+      io.to(code).emit('spell_result', { caster:pi, spell, effect:'heal', heal:h });
+      room.state.turn = ti; emitTurnChange(code, room, io);
+      return;
+    }
+    if (s.dmg > 0) {
+      const rawDmg = Math.round(s.dmg * mults.dmg);
+      const targetUsername = room.state.players[ti].username;
+      const targetRow = stmts.findUser(targetUsername);
+      const targetProfile = targetRow ? rowToProfile(targetRow) : null;
+      const targetLevel = targetProfile ? calcLevel(targetProfile.xp) : LEVELS[0];
+      const secs = targetLevel.counterSecs;
+      const phrase = COUNTER_PHRASES[Math.floor(Math.random()*COUNTER_PHRASES.length)];
+      const keywords = COUNTER_KEYWORDS[phrase] || [phrase.replace(/[¡!]/g,'').toLowerCase()];
+
+      room.state.phase = 'counter';
+      room.state.counterFor = ti;
+      room.state.counterDmg = rawDmg;
+      room.state.counterPhrase = phrase;
+      room.state.counterDeadline = Date.now() + secs*1000;
+
+      io.to(code).emit('spell_result', { caster:pi, spell, effect:'attack', rawDmg });
+      room.sockets[ti].emit('counter_challenge', { phrase, keywords, secs, rawDmg });
+      room.sockets[pi].emit('counter_pending', { secs });
+
+      setTimeout(() => {
+        if (room.state.phase === 'counter') resolveCounter(code, room, false);
+      }, (secs + 1.5) * 1000);
+    }
+  });
+
+  socket.on('counter_attempt', ({ success, reactionMs }) => {
+    const code = socket.roomCode;
+    const room = rooms[code];
+    if (!room || room.state.phase !== 'counter') return;
+    if (socket.playerIndex !== room.state.counterFor) return;
+    // Record reaction time
+    if (reactionMs && reactionMs > 0) {
+      room.state.players[socket.playerIndex].reactionTimes.push(reactionMs);
+    }
+    resolveCounter(code, room, success);
+  });
+
+  socket.on('disconnect', () => {
+    const code = socket.roomCode;
+    if (!code || !rooms[code]) return;
+    const room = rooms[code];
+    const pi = socket.playerIndex;
+    const bothConnected = room.sockets.filter(Boolean).length >= 2;
+    console.log(`[${INSTANCE_ID}] disconnect: player ${pi} left room ${code} | phase: ${room.state.phase} | both: ${bothConnected}`);
+
+    // null out this socket slot so reconnect can reclaim it
+    room.sockets[pi] = null;
+
+    if (bothConnected) {
+      // Duel was in progress — give opponent 60s grace to reconnect
+      room._deleteTO = setTimeout(() => {
+        if (rooms[code]) {
+          io.to(code).emit('opponent_disconnected');
+          deleteRoom(code);
+        }
+      }, 60000);
+      console.log(`[${INSTANCE_ID}] Room ${code}: duel paused, waiting 60s for reconnect`);
+    } else {
+      // Only 1 player was in room (waiting for rival) — keep room alive 30 min
+      // so creator can reconnect and share the same code
+      room._deleteTO = setTimeout(() => {
+        if (rooms[code]) {
+          console.log(`[${INSTANCE_ID}] Room ${code} expired after 30min`);
+          deleteRoom(code);
+        }
+      }, 30 * 60 * 1000);
+      console.log(`[${INSTANCE_ID}] Room ${code} kept alive 30min for reconnect`);
+    }
+  });
+});
+
+// ─── COUNTER RESOLUTION ───────────────────────────────────────────────────────
+function resolveCounter(code, room, success) {
+  const ti = room.state.counterFor;
+  const pi = ti === 0 ? 1 : 0;
+  const rawDmg = room.state.counterDmg;
+
+  if (success) {
+    const rebound = Math.floor(rawDmg * 0.5);
+    room.state.players[pi].hp = Math.max(0, room.state.players[pi].hp - rebound);
+    room.state.players[ti].countersOk++;
+    io.to(code).emit('counter_result', { success:true, rebound, defender:ti });
+  } else {
+    let dmg = rawDmg;
+    if (room.state.players[ti].shield) { dmg = Math.floor(dmg*.5); room.state.players[ti].shield = false; }
+    room.state.players[ti].hp = Math.max(0, room.state.players[ti].hp - dmg);
+    room.state.players[ti].countersFail++;
+    io.to(code).emit('counter_result', { success:false, dmg, defender:ti });
+  }
+
+  room.state.phase = 'battle';
+  room.state.counterFor = null;
+  checkWin(code, room);
+  if (room.state.phase !== 'gameover') {
+    room.state.turn = ti;
+    emitTurnChange(code, room, io);
+  }
+}
+
+// ─── WIN / XP RESOLUTION ──────────────────────────────────────────────────────
+function deleteRoom(code) {
+  delete rooms[code];
+  for (const [u, c] of Object.entries(roomByUser)) {
+    if (c === code) delete roomByUser[u];
+  }
+  console.log(`[${INSTANCE_ID}] Room ${code} deleted`);
+}
+
+function checkWin(code, room) {
+  const [p0, p1] = room.state.players;
+  if (p0.hp > 0 && p1.hp > 0) return;
+  const winnerIdx = p0.hp > 0 ? 0 : 1;
+  const loserIdx  = winnerIdx === 0 ? 1 : 0;
+
+  room.state.phase = 'gameover';
+
+  const winnerUsername = room.state.players[winnerIdx].username;
+  const loserUsername  = room.state.players[loserIdx].username;
+  const wRow = stmts.findUser(winnerUsername);
+  const lRow = stmts.findUser(loserUsername);
+  const wp = wRow ? rowToProfile(wRow) : null;
+  const lp = lRow ? rowToProfile(lRow) : null;
+
+  // Build XP event lists
+  const winnerEvents = ['win'];
+  const loserEvents  = ['loss'];
+
+  // Counters
+  for (let i = 0; i < room.state.players[winnerIdx].countersOk;   i++) winnerEvents.push('counter_success');
+  for (let i = 0; i < room.state.players[winnerIdx].countersFail;  i++) winnerEvents.push('counter_fail');
+  for (let i = 0; i < room.state.players[loserIdx].countersOk;    i++) loserEvents.push('counter_success');
+  for (let i = 0; i < room.state.players[loserIdx].countersFail;   i++) loserEvents.push('counter_fail');
+
+  // Combos
+  for (let i = 0; i < room.state.players[winnerIdx].combos; i++) winnerEvents.push('combo');
+  for (let i = 0; i < room.state.players[loserIdx].combos;  i++) loserEvents.push('combo');
+
+  // Reaction time bonuses
+  function avgReaction(times) {
+    if (!times.length) return null;
+    return times.reduce((a,b) => a+b, 0) / times.length;
+  }
+  const wAvg = avgReaction(room.state.players[winnerIdx].reactionTimes);
+  const lAvg = avgReaction(room.state.players[loserIdx].reactionTimes);
+  if (wAvg !== null) { if (wAvg < 1200) winnerEvents.push('reaction_fast'); else if (wAvg < 2000) winnerEvents.push('reaction_ok'); }
+  if (lAvg !== null) { if (lAvg < 1200) loserEvents.push('reaction_fast'); else if (lAvg < 2000) loserEvents.push('reaction_ok'); }
+
+  // Streak
+  if (wp) {
+    wp.stats.wins++;
+    wp.streak = (wp.streak || 0) + 1;
+    if (wp.streak === 3) winnerEvents.push('streak_3');
+    if (wp.streak === 5) winnerEvents.push('streak_5');
+    wp.lastWin = Date.now();
+  }
+  if (lp) {
+    lp.stats.losses++;
+    lp.streak = 0;
+    lp.stats.countersSuccess += room.state.players[loserIdx].countersOk;
+    lp.stats.countersFail    += room.state.players[loserIdx].countersFail;
+  }
+  if (wp) {
+    wp.stats.countersSuccess += room.state.players[winnerIdx].countersOk;
+    wp.stats.countersFail    += room.state.players[winnerIdx].countersFail;
+  }
+
+  // Award XP
+  const winnerXP = wp ? awardXP(wp, winnerEvents) : null;
+  const loserXP  = lp ? awardXP(lp, loserEvents)  : null;
+
+  // Reaction stats
+  if (wp && wAvg !== null) {
+    wp.stats.totalReactionMs  += wAvg * room.state.players[winnerIdx].reactionTimes.length;
+    wp.stats.reactionSamples  += room.state.players[winnerIdx].reactionTimes.length;
+  }
+  if (lp && lAvg !== null) {
+    lp.stats.totalReactionMs  += lAvg * room.state.players[loserIdx].reactionTimes.length;
+    lp.stats.reactionSamples  += room.state.players[loserIdx].reactionTimes.length;
+  }
+
+  // Persist updated profiles to SQLite
+  if (wp) saveProfile(wp);
+  if (lp) saveProfile(lp);
+
+  // Send game_over with full XP breakdown to each player
+  if (room.sockets[winnerIdx]) {
+    room.sockets[winnerIdx].emit('game_over', {
+      winner: winnerIdx,
+      xpResult: winnerXP,
+      newProfile: wp ? publicProfile(wp) : null,
+    });
+  }
+  if (room.sockets[loserIdx]) {
+    room.sockets[loserIdx].emit('game_over', {
+      winner: winnerIdx,
+      xpResult: loserXP,
+      newProfile: lp ? publicProfile(lp) : null,
+    });
+  }
+
+  // Clean up room after game ends — delay 5s so sockets receive game_over first
+  setTimeout(() => deleteRoom(code), 5000);
+}
+
+function publicProfile(p, pendingRoom) {
+  const level = calcLevel(p.xp);
+  const next = xpToNextLevel(p.xp);
+  const avatar = p.avatar || '🧙';
+  const pending = pendingRoom || roomByUser[p.username] || null;
+  const avgReaction = p.stats.reactionSamples > 0
+    ? Math.round(p.stats.totalReactionMs / p.stats.reactionSamples)
+    : null;
+  return {
+    username: p.username,
+    avatar,
+    pendingRoom: pending,
+    xp: p.xp,
+    level: level.n,
+    levelName: level.name,
+    counterSecs: level.counterSecs,
+    next,
+    streak: p.streak,
+    stats: { ...p.stats, avgReactionMs: avgReaction },
+  };
+}
+
+const PORT = process.env.PORT || 3000;
+const INSTANCE_ID = Math.random().toString(36).substring(2,6).toUpperCase();
+
+initDb().then(() => {
+  console.log('DB ready — starting server');
+  server.listen(PORT, () => {
+    console.log(`Wizard Duel v2 running on port ${PORT} — instance ${INSTANCE_ID}`);
+  });
+}).catch(err => {
+  console.error('Failed to init DB:', err);
+  process.exit(1);
+});
+
+// Log active rooms every 30s so we can debug missing rooms
+setInterval(() => {
+  const codes = Object.keys(rooms);
+  if(codes.length > 0) console.log(`[${INSTANCE_ID}] Active rooms:`, codes);
+}, 30000);
