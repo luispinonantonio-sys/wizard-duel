@@ -86,6 +86,10 @@ function saveProfile(p) {
 
 // rooms are still ephemeral (in-memory) — they only last one match
 const rooms = {};
+// track which username created which room, so reconnects can reclaim it
+const roomByUser = {}; // username -> code
+// track active sessions so socket reconnects can restore state without re-login
+const sessionByUser = {}; // username -> { profile snapshot }
 
 // ─── XP & LEVEL CONFIG ────────────────────────────────────────────────────────
 const LEVELS = [
@@ -254,8 +258,62 @@ io.on('connection', socket => {
     const ok = await bcrypt.compare(password, row.password_hash);
     if (!ok) { socket.emit('auth_error', { msg: 'Contraseña incorrecta' }); return; }
     socket.username = u;
+    sessionByUser[u] = true;
+    // restore room membership if user reconnects while waiting
+    const pendingCode = roomByUser[u];
+    if (pendingCode && rooms[pendingCode] && rooms[pendingCode].sockets[1] === null) {
+      rooms[pendingCode].sockets[0] = socket;
+      socket.roomCode = pendingCode;
+      socket.playerIndex = 0;
+      socket.join(pendingCode);
+      console.log(`[${INSTANCE_ID}] Restored ${u} to room ${pendingCode} after reconnect`);
+    }
     socket.emit('auth_ok', publicProfile(rowToProfile(row)));
     console.log('login:', u);
+  });
+
+  // ─── RECONNECT ─────────────────────────────────────────────────────────────
+  // Called by client when socket reconnects but user already has a local session
+  socket.on('reconnect_session', ({ username }) => {
+    if (!username) return;
+    const u = username.trim().toLowerCase();
+    const row = stmts.findUser.get(u);
+    if (!row) { socket.emit('session_invalid'); return; }
+    socket.username = u;
+    sessionByUser[u] = true;
+    // restore room if waiting
+    const pendingCode = roomByUser[u];
+    if (pendingCode && rooms[pendingCode]) {
+      const room = rooms[pendingCode];
+      const pi = room.state.players.findIndex(p => p.username === u);
+      if (pi >= 0) {
+        room.sockets[pi] = socket;
+        socket.roomCode = pendingCode;
+        socket.playerIndex = pi;
+        socket.join(pendingCode);
+        console.log(`[${INSTANCE_ID}] Session restored for ${u} in room ${pendingCode} player ${pi}`);
+        // if duel was in progress, send state to reconnected player
+        if (room.sockets[0] && room.sockets[1]) {
+          const p0row = stmts.findUser.get(room.state.players[0].username);
+          const p1row = stmts.findUser.get(room.state.players[1].username);
+          const p0 = p0row ? rowToProfile(p0row) : null;
+          const p1 = p1row ? rowToProfile(p1row) : null;
+          socket.emit('session_restored', {
+            profile: publicProfile(row),
+            inDuel: room.state.phase !== 'gameover',
+            yourIndex: pi,
+            yourLevel: calcLevel(rowToProfile(row).xp).n,
+            oppLevel: calcLevel((pi===0?p1:p0)?.xp||0).n,
+            oppName: room.state.players[pi===0?1:0].username,
+            oppAvatar: (pi===0?p1:p0)?.avatar || '🧙',
+            state: room.state,
+          });
+          return;
+        }
+      }
+    }
+    // no active room — just restore profile
+    socket.emit('session_restored', { profile: publicProfile(rowToProfile(row)), inDuel: false });
   });
 
   socket.on('update_avatar', ({ avatar }) => {
@@ -282,6 +340,7 @@ io.on('connection', socket => {
     socket.join(code);
     socket.roomCode = code;
     socket.playerIndex = 0;
+    roomByUser[socket.username] = code;
     console.log(`[${INSTANCE_ID}] room created: ${code} | total rooms: ${Object.keys(rooms).length}`);
     socket.emit('room_created', { code, level: level.n });
   });
@@ -411,8 +470,34 @@ io.on('connection', socket => {
   socket.on('disconnect', () => {
     const code = socket.roomCode;
     if (!code || !rooms[code]) return;
-    io.to(code).emit('opponent_disconnected');
+    const room = rooms[code];
+    const pi = socket.playerIndex;
+    console.log(`[${INSTANCE_ID}] disconnect: player ${pi} left room ${code} | phase: ${room.state.phase}`);
+
+    // If duel hasn't started yet (only 1 player waiting), give 8s grace period
+    // in case it's a brief reconnect (page refresh, mobile browser switching)
+    if (room.state.phase === 'battle' && room.sockets.filter(Boolean).length < 2) {
+      console.log(`[${INSTANCE_ID}] Room ${code} waiting for grace period before delete`);
+      setTimeout(() => {
+        // only delete if socket hasn't reconnected
+        if (rooms[code] && rooms[code].sockets[pi] === socket) {
+          console.log(`[${INSTANCE_ID}] Deleting room ${code} after grace period`);
+          delete rooms[code];
+        }
+      }, 8000);
+      return;
+    }
+
+    // Duel in progress — notify opponent immediately
+    if (room.sockets.filter(Boolean).length >= 2) {
+      io.to(code).emit('opponent_disconnected');
+    }
     delete rooms[code];
+    // clean up user->room mapping
+    for (const [u, c] of Object.entries(roomByUser)) {
+      if (c === code) delete roomByUser[u];
+    }
+    console.log(`[${INSTANCE_ID}] Room ${code} deleted`);
   });
 });
 
