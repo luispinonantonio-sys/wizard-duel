@@ -150,15 +150,17 @@ const PATH_MULTS = {
   trickster:  { dmg: 1.1, heal: 1.0 },
 };
 const SPELLS = {
-  stupefy:      { dmg: 25, heal: 0 },
-  expelliarmus: { dmg: 20, heal: 0 },
-  lumos:        { dmg: 0,  heal: 20 },
-  protego:      { dmg: 0,  heal: 0, shield: true },
-  avada:        { dmg: 45, heal: 0 },
-  crucio:       { dmg: 35, heal: 0 },
-  aguamenti:    { dmg: 0,  heal: 30 },
-  confundo:     { dmg: 15, heal: 0, stun: true },
-  sectum:       { dmg: 40, heal: 0 },
+  // básicos — clic y voz
+  aturdir:   { dmg: 25, heal: 0 },
+  expulsar:  { dmg: 20, heal: 0 },
+  sanar:     { dmg: 0,  heal: 20 },
+  escudo:    { dmg: 0,  heal: 0,  shield: true },
+  // poderosos — solo voz
+  destruir:  { dmg: 45, heal: 0 },
+  quemar:    { dmg: 35, heal: 0 },
+  restaurar: { dmg: 0,  heal: 30 },
+  confundir: { dmg: 15, heal: 0,  stun: true },
+  desgarrar: { dmg: 40, heal: 0 },
 };
 const CAST_SECS = 4; // fixed time to choose a spell each turn
 
@@ -200,9 +202,9 @@ function emitTurnChange(code, room, io) {
   const pi = room.state.turn;
   const playerPath = room.state.players[pi].path;
   const PATH_SPELLS = {
-    destructor: ['stupefy','avada','expelliarmus','crucio'],
-    guardian:   ['protego','lumos','expelliarmus','aguamenti'],
-    trickster:  ['confundo','expelliarmus','stupefy','sectum'],
+    destructor: ['aturdir','destruir','expulsar','quemar'],
+    guardian:   ['escudo','sanar','expulsar','restaurar'],
+    trickster:  ['confundir','expulsar','aturdir','desgarrar'],
   };
   const spells = PATH_SPELLS[playerPath] || PATH_SPELLS.destructor;
   const spellOrder = shuffle(spells);
