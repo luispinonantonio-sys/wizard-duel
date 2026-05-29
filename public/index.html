@@ -486,7 +486,24 @@ let G={
   counterInterval:null,counterStartTs:0,castInterval:null,
 };
 
-const socket=io();
+const socket=io({
+  reconnection: true,
+  reconnectionAttempts: 10,
+  reconnectionDelay: 1000,
+  reconnectionDelayMax: 5000,
+});
+
+// When socket reconnects, restore session automatically
+socket.on('connect', () => {
+  // only attempt restore if we have a stored username but lost our profile
+  try{
+    const stored = sessionStorage.getItem('wduser');
+    if(stored && !G.profile){
+      setAuthMsg('Reconectando...','wait');
+      socket.emit('reconnect_session', { username: stored });
+    }
+  }catch(e){}
+});
 
 // ── AUTH ─────────────────────────────────────────────────────────────────────
 function showTab(t){
@@ -536,13 +553,63 @@ function doRegister(){
 }
 socket.on('auth_ok',profile=>{
   G.profile=profile;
+  try{ sessionStorage.setItem('wduser', profile.username); }catch(e){}
   document.getElementById('auth-screen').style.display='none';
   document.getElementById('lobby-screen').style.display='flex';
   renderLobby();
 });
 socket.on('auth_error',({msg})=>setAuthMsg(msg,'err'));
+
+socket.on('session_invalid',()=>{
+  try{ sessionStorage.removeItem('wduser'); }catch(e){}
+  setAuthMsg('Sesión expirada — inicia sesión de nuevo','err');
+});
+
+socket.on('session_restored',({profile,inDuel,yourIndex,yourLevel,oppLevel,oppName,oppAvatar})=>{
+  G.profile=profile;
+  setAuthMsg('','');
+  if(inDuel && yourIndex!=null){
+    // restore mid-game state
+    G.myIndex=yourIndex; G.myHP=100; G.oppHP=100; G.myTurn=false;
+    document.getElementById('auth-screen').style.display='none';
+    document.getElementById('lobby-screen').style.display='none';
+    const gameEl=document.getElementById('game');
+    gameEl.style.display='flex';
+    const p=PATHS[G.selectedPath]||PATHS.destructor;
+    // restore what we can from server state
+    const myAv=profile.avatar||'🧙';
+    const oppAv=oppAvatar||'🧙‍♀️';
+    document.getElementById('psp').textContent=myAv;
+    document.getElementById('esp').textContent=oppAv;
+    document.getElementById('p-name').textContent=myAv+' '+profile.username.toUpperCase();
+    document.getElementById('opp-name').textContent=oppAv+' '+(oppName||'RIVAL').toUpperCase();
+    const myM=LEVEL_META.find(l=>l.n===yourLevel)||LEVEL_META[0];
+    const opM=LEVEL_META.find(l=>l.n===oppLevel)||LEVEL_META[0];
+    document.getElementById('psp-badge').textContent=myM.icon;
+    document.getElementById('esp-badge').textContent=opM.icon;
+    document.getElementById('p-lvl').textContent=myM.icon+' '+myM.name;
+    document.getElementById('opp-lvl').textContent=opM.icon+' '+opM.name;
+    addLog('🔄 Reconectado al duelo','hl');
+    _initAudio(); musicStart();
+    if(!G.selectedPath) G.selectedPath='destructor';
+    renderSpells();
+  } else {
+    // back to lobby
+    document.getElementById('auth-screen').style.display='none';
+    document.getElementById('lobby-screen').style.display='flex';
+    renderLobby();
+    // if had a pending room, show the code box
+    if(profile.pendingRoom){
+      document.getElementById('room-btns').style.display='none';
+      document.getElementById('code-display').style.display='block';
+      document.getElementById('code-big').textContent=profile.pendingRoom;
+      setLobbyMsg('Reconectado — esperando al rival...','wait');
+    }
+  }
+});
 function logout(){
   G.profile=null;G.selectedPath=null;
+  try{ sessionStorage.removeItem('wduser'); }catch(e){}
   document.getElementById('lobby-screen').style.display='none';
   document.getElementById('auth-screen').style.display='flex';
   setAuthMsg('','');
