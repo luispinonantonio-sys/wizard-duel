@@ -341,6 +341,10 @@ const ROUND_SECS = 4;
 
 function startRound(code, room, io) {
   if (!rooms[code] || room.state.phase === 'gameover') return;
+  // schedule CPU move if this is a CPU game
+  if (room.isCpu) {
+    setTimeout(() => scheduleCpuTurn(code, room, io), 100);
+  }
 
   // clear previous choices
   room.state.players[0].choice = null;
@@ -603,6 +607,40 @@ io.on('connection', socket => {
     }
   });
 
+  // ─── CPU MODE ────────────────────────────────────────────────────────────
+  socket.on('play_vs_cpu', () => {
+    if (!socket.username) { socket.emit('error', { msg: 'Inicia sesión primero' }); return; }
+    const row = stmts.findUser(socket.username);
+    if (!row) { socket.emit('error', { msg: 'Perfil no encontrado' }); return; }
+    const profile = rowToProfile(row);
+    const playerPath = profile.path || 'destructor';
+    const { code, cpuPath } = startCpuRoom(socket, playerPath);
+
+    // update player wins so arsenal is correct
+    rooms[code].state.players[0].wins = profile.stats.wins;
+
+    const cpuPathMeta = { destructor:'💥 Destructor', guardian:'🛡️ Guardián', trickster:'🎭 Trickster' };
+    const playerLevel = calcLevel(profile.xp);
+
+    console.log(`[${INSTANCE_ID}] CPU game started for ${socket.username} vs ${cpuPath}`);
+
+    setTimeout(() => {
+      if (!rooms[code]) return;
+      startRound(code, rooms[code], io);
+      socket.emit('duel_start', {
+        yourIndex: 0,
+        yourLevel: playerLevel.n,
+        oppLevel: 5, // CPU always shows as max level visually
+        oppName: 'CPU',
+        oppAvatar: '🤖',
+        isCpu: true,
+        cpuPath,
+        cpuPathName: cpuPathMeta[cpuPath] || cpuPath,
+      });
+      scheduleCpuTurn(code, rooms[code], io);
+    }, 500);
+  });
+
   // ─── SIMULTANEOUS COMBAT ─────────────────────────────────────────────────
   socket.on('choose_spell', ({ spell }) => {
     const code = socket.roomCode;
@@ -790,6 +828,118 @@ function resolveRound(code, room, io) {
   }
 }
 
+// ── CPU OPPONENT ─────────────────────────────────────────────────────────────
+const CPU_COUNTER_PATH = {
+  destructor: 'guardian',   // guardian blocks attacks
+  guardian:   'trickster',  // trickster pierces shields
+  trickster:  'destructor', // destructor overwhelms with raw damage
+};
+
+function cpuChooseSpell(room) {
+  const cpu = room.state.players[1];  // CPU is always player 1
+  const player = room.state.players[0];
+  const hand = cpu.hand;
+  if (!hand || !hand.length) return null;
+
+  const affordable = hand.filter(k => {
+    const s = CATALOG[k];
+    return s && cpu.energy >= s.cost;
+  });
+  if (!affordable.length) return hand[0]; // fallback
+
+  const playerHPPct = player.hp / 100;
+  const cpuHPPct = cpu.hp / 100;
+  const playerEnergyPct = player.energy / MAX_ENERGY;
+  const cpuEnergyPct = cpu.energy / MAX_ENERGY;
+
+  // Score each spell based on game state
+  function scoreSpell(key) {
+    const s = CATALOG[key];
+    if (!s) return 0;
+    let score = Math.random() * 20; // base randomness
+
+    // Aggressive — attack when player is weak
+    if (s.dmg > 0) {
+      score += (1 - playerHPPct) * 40;   // more valuable when player is low
+      score += s.power * 15;              // prefer powerful spells
+      if (playerEnergyPct < 0.3) score += 25; // player can't afford strong defense
+    }
+
+    // Defensive — heal/shield when CPU is weak
+    if (s.heal > 0) {
+      score += (1 - cpuHPPct) * 50;      // very valuable when CPU is low
+      score += s.heal * 0.8;
+    }
+    if (s.shield) {
+      // shield when player likely to attack (high energy) or CPU is low
+      score += (1 - cpuHPPct) * 30;
+      score += playerEnergyPct * 25;      // player has energy to attack
+    }
+    if (s.reflect) {
+      score += playerEnergyPct * 35;      // good when player will attack
+    }
+
+    // Energy management — don't waste energy on expensive spells if low
+    if (cpuEnergyPct < 0.4 && s.cost > 35) score -= 30;
+    if (cpuEnergyPct > 0.8 && s.cost > 40) score += 10; // spend energy when full
+
+    // Legendary bonus
+    if (s.legendary) score += 20;
+
+    return score;
+  }
+
+  // Pick best scoring affordable spell
+  let best = affordable[0], bestScore = -Infinity;
+  for (const key of affordable) {
+    const sc = scoreSpell(key);
+    if (sc > bestScore) { bestScore = sc; best = key; }
+  }
+  return best;
+}
+
+function startCpuRoom(socket, playerPath) {
+  const code = 'CPU_' + Math.random().toString(36).substring(2,6).toUpperCase();
+  const state = makeRoomState();
+  const cpuPath = CPU_COUNTER_PATH[playerPath] || 'destructor';
+
+  state.players[0].path = playerPath;
+  state.players[0].username = socket.username;
+  state.players[0].wins = 0; // will be set from profile
+
+  state.players[1].path = cpuPath;
+  state.players[1].username = '🤖 CPU';
+  state.players[1].wins = 15; // CPU has all spells unlocked
+
+  rooms[code] = { sockets: [socket, null], state, isCpu: true };
+  socket.join(code);
+  socket.roomCode = code;
+  socket.playerIndex = 0;
+
+  return { code, cpuPath };
+}
+
+function scheduleCpuTurn(code, room, io) {
+  if (!rooms[code] || !room.isCpu) return;
+  if (room.state.phase !== 'simultaneous') return;
+
+  // CPU "thinks" for 0.5-2.5 seconds to feel natural
+  const thinkTime = 500 + Math.random() * 2000;
+  setTimeout(() => {
+    if (!rooms[code] || room.state.phase !== 'simultaneous') return;
+    const spell = cpuChooseSpell(room);
+    if (spell) {
+      room.state.players[1].choice = spell;
+      room.state.players[1].choiceTime = Date.now();
+      // if player already chose, resolve now
+      if (room.state.players[0].choice) {
+        clearTimeout(room.state.roundTimeout);
+        setTimeout(() => resolveRound(code, room, io), 200);
+      }
+    }
+  }, thinkTime);
+}
+
 function deleteRoom(code) {
   delete rooms[code];
   for (const [u, c] of Object.entries(roomByUser)) {
@@ -870,9 +1020,9 @@ function checkWin(code, room) {
     lp.stats.reactionSamples  += room.state.players[loserIdx].reactionTimes.length;
   }
 
-  // Persist updated profiles to SQLite
-  if (wp) saveProfile(wp);
-  if (lp) saveProfile(lp);
+  // Don't save CPU profile — only save real players
+  if (wp && winnerUsername !== '🤖 CPU') saveProfile(wp);
+  if (lp && loserUsername !== '🤖 CPU') saveProfile(lp);
 
   // Send game_over with full XP breakdown to each player
   if (room.sockets[winnerIdx]) {
