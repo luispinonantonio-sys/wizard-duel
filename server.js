@@ -210,7 +210,7 @@ io.on('connection', socket => {
     const profile = row ? rowToProfile(row) : null;
     if (!profile) { socket.emit('error', { msg: 'Perfil no encontrado' }); return; }
     const level = calcLevel(profile.xp);
-    const code = makeCode();
+    const code = makeCode();  // already uppercase
     const state = makeRoomState();
     state.players[0].path = path;
     state.players[0].username = socket.username;
@@ -218,13 +218,16 @@ io.on('connection', socket => {
     socket.join(code);
     socket.roomCode = code;
     socket.playerIndex = 0;
+    console.log('room created:', code, '| total rooms:', Object.keys(rooms).length);
     socket.emit('room_created', { code, level: level.n });
   });
 
   socket.on('join_room', ({ code, path }) => {
     if (!socket.username) { socket.emit('error', { msg: 'Inicia sesión primero' }); return; }
-    const room = rooms[code.toUpperCase()];
-    if (!room) { socket.emit('error', { msg: 'Sala no encontrada' }); return; }
+    const normalCode = (code || '').trim().toUpperCase();
+    console.log('join attempt:', normalCode, '| existing rooms:', Object.keys(rooms));
+    const room = rooms[normalCode];
+    if (!room) { socket.emit('error', { msg: 'Sala no encontrada — ¿el código es correcto?' }); return; }
     if (room.sockets[1]) { socket.emit('error', { msg: 'Sala llena' }); return; }
 
     const r1 = stmts.findUser.get(socket.username);
