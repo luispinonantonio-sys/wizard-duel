@@ -615,6 +615,26 @@ let G={
 };
 
 window._catalogForManual=CATALOG;
+window._pathSpellsUnlock={
+  destructor:[
+    {key:'aturdir',unlock:0},{key:'expulsar',unlock:0},{key:'escudo',unlock:0},
+    {key:'golpe',unlock:0},{key:'impacto',unlock:0},{key:'quemar',unlock:0},{key:'destruir',unlock:0},
+    {key:'tormenta',unlock:3},{key:'rafaga',unlock:6},{key:'aniquilar',unlock:9},{key:'caos_total',unlock:12},
+  ],
+  guardian:[
+    {key:'aturdir',unlock:0},{key:'expulsar',unlock:0},{key:'escudo',unlock:0},
+    {key:'sanar',unlock:0},{key:'refugio',unlock:0},{key:'barrera',unlock:0},
+    {key:'restaurar',unlock:3},{key:'reflejo',unlock:3},
+    {key:'golpe_sagrado',unlock:6},{key:'curar_mayor',unlock:6},
+    {key:'escudo_doble',unlock:9},{key:'marea_sagrada',unlock:9},{key:'fortaleza',unlock:12},
+  ],
+  trickster:[
+    {key:'aturdir',unlock:0},{key:'expulsar',unlock:0},{key:'escudo',unlock:0},
+    {key:'confundir',unlock:0},{key:'desgarrar',unlock:0},{key:'engañar',unlock:0},
+    {key:'desviar',unlock:0},{key:'invertir',unlock:0},
+    {key:'ilusion',unlock:3},{key:'trampa',unlock:6},{key:'robar',unlock:9},{key:'caos_puro',unlock:12},
+  ],
+};
 const socket=io({
   reconnection: true,
   reconnectionAttempts: 10,
@@ -1720,6 +1740,8 @@ function spellSoundKey(sk){
 
 function openManual(){
   if(document.getElementById('manual-overlay')) return;
+  // reset arsenal so it rebuilds with latest profile data
+  window._arsenalBuilt=false;
   const ov=document.createElement('div');
   ov.className='manual-bg'; ov.id='manual-overlay';
   ov.innerHTML=`
@@ -1728,13 +1750,15 @@ function openManual(){
       <div style="color:rgba(200,180,255,.5);font-size:10px;font-style:italic">Todo para convertirte en Maestro</div>
     </div>
     <div class="manual-nav">
-      <div class="mnav-tab on" onclick="mShowSec('rules',this)">⚔️ REGLAS</div>
+      <div class="mnav-tab on" onclick="mShowSec('arsenal',this)">🎴 MI ARSENAL</div>
+      <div class="mnav-tab" onclick="mShowSec('rules',this)">⚔️ REGLAS</div>
       <div class="mnav-tab" onclick="mShowSec('paths',this)">🧙 CAMINOS</div>
       <div class="mnav-tab" onclick="mShowSec('spells',this)">✨ HECHIZOS</div>
       <div class="mnav-tab" onclick="mShowSec('tips',this)">💡 CONSEJOS</div>
     </div>
     <div class="manual-body">
-      <div class="msec on" id="msec-rules">
+      <div class="msec on" id="msec-arsenal" data-built="false"></div>
+      <div class="msec" id="msec-rules">
         <div class="mcard"><div class="mcard-title">🎯 Objetivo</div><div class="mcard-body">Reduce los <span class="mhl">100 HP</span> del rival a cero. El duelo es una serie de rondas hasta que alguien cae.</div></div>
         <div class="mcard"><div class="mcard-title">⚡ Rondas simultáneas</div><div class="mcard-body">Ambos tienen <span class="mhl">4 segundos al mismo tiempo</span> para elegir un hechizo. Puedes tocar la carta o decir su nombre al micrófono. Al terminar el tiempo — o cuando los dos eligieron — el resultado se resuelve.</div></div>
         <div class="mcard"><div class="mcard-title">💥 Tabla de resultados</div>
@@ -1820,8 +1844,83 @@ function spellRow(k,s){
 function mShowSec(id,tab){
   document.querySelectorAll('.msec').forEach(s=>s.classList.remove('on'));
   document.querySelectorAll('.mnav-tab').forEach(t=>t.classList.remove('on'));
-  document.getElementById('msec-'+id).classList.add('on');
+  const sec=document.getElementById('msec-'+id);
+  sec.classList.add('on');
   tab.classList.add('on');
+  if(id==='arsenal' && sec.dataset.built==='false') buildArsenal(sec);
+}
+
+function buildArsenal(sec){
+  sec.dataset.built='true';
+  const profile=G.profile;
+  if(!profile||!profile.path){ sec.innerHTML='<div style="text-align:center;padding:20px;color:rgba(200,180,255,.5);font-style:italic">Inicia sesión para ver tu arsenal</div>'; return; }
+  const wins=profile.stats?.wins||0;
+  const pathMeta={destructor:{color:'#f87171',icon:'💥'},guardian:{color:'#60a5fa',icon:'🛡️'},trickster:{color:'#c084fc',icon:'🎭'}};
+  const pm=pathMeta[profile.path]||pathMeta.destructor;
+  const allSpells=window._pathSpellsUnlock[profile.path]||[];
+  const unlocked=allSpells.filter(s=>wins>=s.unlock);
+  const locked=allSpells.filter(s=>wins<s.unlock);
+  const nextUnlock=locked.length?locked[0].unlock:null;
+  const winsToNext=nextUnlock?nextUnlock-wins:0;
+
+  let html=`
+    <div style="background:${pm.color}0d;border:1px solid ${pm.color}33;border-radius:10px;padding:12px 14px;margin-bottom:12px;text-align:center">
+      <div style="font-family:'Cinzel',serif;color:${pm.color};font-size:13px;font-weight:700;letter-spacing:2px;margin-bottom:4px">${pm.icon} ${profile.path.toUpperCase()}</div>
+      <div style="font-size:12px;color:rgba(200,180,255,.6);font-family:serif">${unlocked.length} hechizos disponibles · ${wins} victorias</div>
+      ${nextUnlock?`<div style="font-size:11px;color:#a855f7;margin-top:4px;font-family:'Cinzel',serif">Próximo desbloqueo en ${winsToNext} victoria${winsToNext===1?'':'s'}</div>`:'<div style="font-size:11px;color:#e8c87a;margin-top:4px;font-family:Cinzel,serif">⭐ Arsenal completo</div>'}
+    </div>`;
+
+  // progress bar
+  const pct=Math.round(unlocked.length/allSpells.length*100);
+  html+=`<div style="margin-bottom:14px">
+    <div style="display:flex;justify-content:space-between;font-family:Cinzel,serif;font-size:9px;color:rgba(200,180,255,.5);letter-spacing:1px;margin-bottom:4px">
+      <span>PROGRESO DEL ARSENAL</span><span>${unlocked.length}/${allSpells.length}</span>
+    </div>
+    <div style="height:6px;background:rgba(255,255,255,.1);border-radius:3px;overflow:hidden">
+      <div style="height:100%;width:${pct}%;background:linear-gradient(90deg,${pm.color}88,${pm.color});border-radius:3px;transition:width .5s ease"></div>
+    </div>
+  </div>`;
+
+  // unlocked spells
+  html+=`<div style="font-family:'Cinzel',serif;color:#4ade80;font-size:9px;letter-spacing:2px;margin-bottom:8px">— DISPONIBLES (${unlocked.length}) —</div>`;
+  html+=unlocked.map(({key,unlock})=>{
+    const s=CATALOG[key]; if(!s) return '';
+    const tags=[];
+    if(s.dmg) tags.push(`<div class="mtag d">-${s.dmg}hp</div>`);
+    if(s.heal) tags.push(`<div class="mtag h">+${s.heal}hp</div>`);
+    if(s.shield) tags.push(`<div class="mtag s">🛡️</div>`);
+    if(s.reflect) tags.push(`<div class="mtag sp">${Math.round(s.reflect*100)}% rebote</div>`);
+    tags.push(`<div class="mtag c">${s.cost}⚡</div>`);
+    if(s.legendary) tags.push(`<div class="mtag sp">⭐</div>`);
+    const unlockLbl=unlock===0?'inicio':`${unlock} vic`;
+    return `<div class="mspell" style="border-color:rgba(74,222,128,.2)">
+      <div class="mspell-icon">${s.icon}</div>
+      <div class="mspell-info">
+        <div class="mspell-name">${s.name}${s.legendary?' ⭐':''}</div>
+        <div class="mspell-tags">${tags.join('')}<div class="mtag" style="background:rgba(74,222,128,.1);color:#4ade80;border:.5px solid rgba(74,222,128,.3)">${unlockLbl}</div></div>
+      </div>
+    </div>`;
+  }).join('');
+
+  // locked spells
+  if(locked.length){
+    html+=`<div style="font-family:'Cinzel',serif;color:rgba(200,180,255,.4);font-size:9px;letter-spacing:2px;margin:12px 0 8px">— BLOQUEADOS (${locked.length}) —</div>`;
+    html+=locked.map(({key,unlock})=>{
+      const s=CATALOG[key]; if(!s) return '';
+      return `<div class="mspell" style="opacity:.35;filter:grayscale(.7)">
+        <div class="mspell-icon">🔒</div>
+        <div class="mspell-info">
+          <div class="mspell-name">${s.name}</div>
+          <div class="mspell-tags">
+            <div class="mtag" style="background:rgba(168,85,247,.1);color:#a855f7;border:.5px solid rgba(168,85,247,.3)">${unlock} victorias</div>
+            <div class="mtag c">${s.cost}⚡</div>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  sec.innerHTML=html;
 }
 
 function closeManual(){
