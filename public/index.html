@@ -411,8 +411,8 @@ input.code-inp:focus{border-color:#60a5fa}
 <div class="page" id="lobby-screen" style="display:none">
   <div id="profile-card" class="pcard"></div>
 
-  <div class="section-lbl">— TU CAMINO MÁGICO —</div>
-  <div class="path-grid" id="path-grid"></div>
+  <div class="section-lbl" id="path-section-lbl">— TU CAMINO —</div>
+  <div id="path-grid" style="margin-bottom:16px"></div>
 
   <div id="code-display" style="display:none" class="codebox">
     <div class="codebox-lbl">COMPARTE ESTE CÓDIGO</div>
@@ -694,6 +694,7 @@ function doRegister(){
 }
 socket.on('auth_ok',profile=>{
   G.profile=profile;
+  if(profile.path) G.selectedPath=profile.path;
   try{ sessionStorage.setItem('wduser', profile.username); }catch(e){}
   document.getElementById('auth-screen').style.display='none';
   document.getElementById('lobby-screen').style.display='flex';
@@ -766,13 +767,31 @@ function logout(){
 // ── LOBBY ─────────────────────────────────────────────────────────────────────
 function renderLobby(){
   renderProfileCard(G.profile);
-  document.getElementById('path-grid').innerHTML=Object.entries(PATHS).map(([k,p])=>
-    `<div class="path-card${G.selectedPath===k?' on':''}" data-path="${k}" onclick="selPath('${k}')">
-      <div class="path-icon">${p.icon}</div>
-      <div class="path-name">${p.name.toUpperCase()}</div>
-      <div class="path-desc">${p.desc}</div>
-      <div class="path-bonus">${p.bonus}</div>
-    </div>`).join('');
+  const myPath=G.profile?.path;
+  const pathMeta={
+    destructor:{icon:'💥',color:'#f87171',name:'Destructor',desc:'Daño puro y agresivo. Sin piedad, sin defensa.',philosophy:'"El mejor escudo es que el rival no llegue a atacar."'},
+    guardian:  {icon:'🛡️',color:'#60a5fa',name:'Guardián',  desc:'Resistencia y recuperación. Gana por agotamiento.',philosophy:'"No importa cuánto te golpeen — importa quién queda en pie."'},
+    trickster: {icon:'🎭',color:'#c084fc',name:'Trickster', desc:'Caos y control. Impredecible por diseño.',philosophy:'"Si el rival no sabe qué viene, no puede defenderse."'},
+  };
+  if(myPath && pathMeta[myPath]){
+    const pm=pathMeta[myPath];
+    document.getElementById('path-grid').innerHTML=`
+      <div style="grid-column:1/-1;background:${pm.color}0d;border:1.5px solid ${pm.color}44;border-radius:14px;padding:16px;text-align:center">
+        <div style="font-size:36px;margin-bottom:8px">${pm.icon}</div>
+        <div style="font-family:'Cinzel',serif;color:${pm.color};font-size:14px;font-weight:700;letter-spacing:2px;margin-bottom:4px">${pm.name.toUpperCase()}</div>
+        <div style="font-size:12px;color:rgba(200,180,255,.6);font-style:italic;margin-bottom:6px;font-family:serif">${pm.desc}</div>
+        <div style="font-size:11px;color:${pm.color};opacity:.8;font-style:italic;font-family:serif">${pm.philosophy}</div>
+      </div>`;
+  } else {
+    // no path yet — shouldn't happen after registration but show selector as fallback
+    document.getElementById('path-grid').innerHTML=Object.entries(PATHS).map(([k,p])=>
+      `<div class="path-card${G.selectedPath===k?' on':''}" data-path="${k}" onclick="selPath('${k}')">
+        <div class="path-icon">${p.icon}</div>
+        <div class="path-name">${p.name.toUpperCase()}</div>
+        <div class="path-desc">${p.desc}</div>
+        <div class="path-bonus">${p.bonus}</div>
+      </div>`).join('');
+  }
 }
 function renderProfileCard(profile){
   const lm=LEVEL_META.find(l=>l.n===profile.level)||LEVEL_META[0];
@@ -823,14 +842,16 @@ function selPath(k){
 }
 function setLobbyMsg(t,cls){const el=document.getElementById('lobby-msg');el.textContent=t;el.className='msg '+(cls||'');}
 function createRoom(){
-  if(!G.selectedPath){setLobbyMsg('Elige tu camino primero','err');return;}
-  socket.emit('create_room',{path:G.selectedPath});
+  const path=G.profile?.path||G.selectedPath;
+  if(!path){setLobbyMsg('Elige tu camino primero','err');return;}
+  socket.emit('create_room',{path});
 }
 function joinRoom(){
-  if(!G.selectedPath){setLobbyMsg('Elige tu camino primero','err');return;}
+  const path=G.profile?.path||G.selectedPath;
+  if(!path){setLobbyMsg('Elige tu camino primero','err');return;}
   const code=document.getElementById('join-code').value.trim().toUpperCase();
   if(code.length!==4){setLobbyMsg('Código de 4 letras','err');return;}
-  socket.emit('join_room',{code,path:G.selectedPath});
+  socket.emit('join_room',{code,path:G.profile?.path||G.selectedPath});
   setLobbyMsg('Conectando...','wait');
 }
 socket.on('room_created',({code})=>{
