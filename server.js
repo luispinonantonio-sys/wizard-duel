@@ -356,6 +356,12 @@ io.on('connection', socket => {
     const state = makeRoomState();
     state.players[0].path = path;
     state.players[0].username = socket.username;
+    // clear any old room for this user before creating new one
+    const oldCode = roomByUser[socket.username];
+    if (oldCode && rooms[oldCode]) {
+      clearTimeout(rooms[oldCode]._deleteTO);
+      deleteRoom(oldCode);
+    }
     rooms[code] = { sockets: [socket, null], state };
     socket.join(code);
     socket.roomCode = code;
@@ -382,6 +388,12 @@ io.on('connection', socket => {
     const p1 = r1 ? rowToProfile(r1) : null;
     const p0 = r0 ? rowToProfile(r0) : null;
 
+    // clear any pending room the joiner had
+    const joinerOldCode = roomByUser[socket.username];
+    if (joinerOldCode && joinerOldCode !== normalCode && rooms[joinerOldCode]) {
+      clearTimeout(rooms[joinerOldCode]._deleteTO);
+      deleteRoom(joinerOldCode);
+    }
     room.sockets[1] = socket;
     room.state.players[1].path = path;
     room.state.players[1].username = socket.username;
@@ -649,6 +661,9 @@ function checkWin(code, room) {
       newProfile: lp ? publicProfile(lp) : null,
     });
   }
+
+  // Clean up room after game ends — delay 5s so sockets receive game_over first
+  setTimeout(() => deleteRoom(code), 5000);
 }
 
 function publicProfile(p, pendingRoom) {
