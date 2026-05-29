@@ -305,6 +305,13 @@ io.on('connection', socket => {
         socket.playerIndex = pi;
         socket.join(pendingCode);
         console.log(`[${INSTANCE_ID}] Session restored for ${u} in room ${pendingCode} player ${pi}`);
+        // cancel any pending delete
+        if (room._deleteTO) { clearTimeout(room._deleteTO); room._deleteTO = null; }
+        // notify opponent that player is back
+        const oppIdx = pi === 0 ? 1 : 0;
+        if (room.sockets[oppIdx]) {
+          room.sockets[oppIdx].emit('opponent_reconnected');
+        }
         // if duel was in progress, send state to reconnected player
         if (room.sockets[0] && room.sockets[1]) {
           const p0row = stmts.findUser.get(room.state.players[0].username);
@@ -485,35 +492,32 @@ io.on('connection', socket => {
     if (!code || !rooms[code]) return;
     const room = rooms[code];
     const pi = socket.playerIndex;
-    console.log(`[${INSTANCE_ID}] disconnect: player ${pi} left room ${code} | phase: ${room.state.phase}`);
+    const bothConnected = room.sockets.filter(Boolean).length >= 2;
+    console.log(`[${INSTANCE_ID}] disconnect: player ${pi} left room ${code} | phase: ${room.state.phase} | both: ${bothConnected}`);
 
-    // If duel hasn't started yet (only 1 player waiting), give 8s grace period
-    // in case it's a brief reconnect (page refresh, mobile browser switching)
-    if (room.state.phase === 'battle' && room.sockets.filter(Boolean).length < 2) {
-      console.log(`[${INSTANCE_ID}] Room ${code} waiting for grace period before delete`);
-      // store timeout ref so reconnect can cancel it
+    // null out this socket slot so reconnect can reclaim it
+    room.sockets[pi] = null;
+
+    if (bothConnected) {
+      // Duel was in progress — give opponent 60s grace to reconnect
       room._deleteTO = setTimeout(() => {
         if (rooms[code]) {
-          console.log(`[${INSTANCE_ID}] Deleting room ${code} after grace period`);
-          delete rooms[code];
-          for (const [u, c] of Object.entries(roomByUser)) {
-            if (c === code) delete roomByUser[u];
-          }
+          io.to(code).emit('opponent_disconnected');
+          deleteRoom(code);
         }
-      }, 120000); // 2 minutes grace
-      return;
+      }, 60000);
+      console.log(`[${INSTANCE_ID}] Room ${code}: duel paused, waiting 60s for reconnect`);
+    } else {
+      // Only 1 player was in room (waiting for rival) — keep room alive 30 min
+      // so creator can reconnect and share the same code
+      room._deleteTO = setTimeout(() => {
+        if (rooms[code]) {
+          console.log(`[${INSTANCE_ID}] Room ${code} expired after 30min`);
+          deleteRoom(code);
+        }
+      }, 30 * 60 * 1000);
+      console.log(`[${INSTANCE_ID}] Room ${code} kept alive 30min for reconnect`);
     }
-
-    // Duel in progress — notify opponent immediately
-    if (room.sockets.filter(Boolean).length >= 2) {
-      io.to(code).emit('opponent_disconnected');
-    }
-    delete rooms[code];
-    // clean up user->room mapping
-    for (const [u, c] of Object.entries(roomByUser)) {
-      if (c === code) delete roomByUser[u];
-    }
-    console.log(`[${INSTANCE_ID}] Room ${code} deleted`);
   });
 });
 
@@ -546,6 +550,14 @@ function resolveCounter(code, room, success) {
 }
 
 // ─── WIN / XP RESOLUTION ──────────────────────────────────────────────────────
+function deleteRoom(code) {
+  delete rooms[code];
+  for (const [u, c] of Object.entries(roomByUser)) {
+    if (c === code) delete roomByUser[u];
+  }
+  console.log(`[${INSTANCE_ID}] Room ${code} deleted`);
+}
+
 function checkWin(code, room) {
   const [p0, p1] = room.state.players;
   if (p0.hp > 0 && p1.hp > 0) return;
