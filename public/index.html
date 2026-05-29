@@ -1740,8 +1740,6 @@ function spellSoundKey(sk){
 
 function openManual(){
   if(document.getElementById('manual-overlay')) return;
-  // reset arsenal so it rebuilds with latest profile data
-  window._arsenalBuilt=false;
   const ov=document.createElement('div');
   ov.className='manual-bg'; ov.id='manual-overlay';
   ov.innerHTML=`
@@ -1828,6 +1826,9 @@ function openManual(){
       <button onclick="closeManual()" style="width:100%;padding:12px;border-radius:9px;border:1.5px solid rgba(200,180,255,.25);background:rgba(200,180,255,.07);color:rgba(200,180,255,.8);font-family:'Cinzel',serif;font-size:11px;font-weight:700;letter-spacing:2px;cursor:pointer">✕ CERRAR GRIMORIO</button>
     </div>`;
   document.body.appendChild(ov);
+  // build arsenal immediately since it's the first tab
+  const arsenalSec=document.getElementById('msec-arsenal');
+  if(arsenalSec) buildArsenal(arsenalSec);
 }
 
 function spellRow(k,s){
