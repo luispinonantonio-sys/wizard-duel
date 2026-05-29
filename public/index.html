@@ -651,6 +651,10 @@ socket.on('duel_start',({yourIndex,yourLevel,oppLevel,oppName,oppAvatar})=>{
   setSpellsDisabled(!G.myTurn);
   updateTurn();
   addLog('⚔️ ¡El duelo comienza!','');
+  // auto-mic for player 0 who goes first
+  if(G.myTurn && isVoice()){
+    setTimeout(()=>{ if(G.myTurn && !G.listening) startListen(); }, 600);
+  }
 });
 
 // ── SPELLS ────────────────────────────────────────────────────────────────────
@@ -704,7 +708,7 @@ function startListen(){
 function stopListen(){
   G.listening=false;try{G.recognition?.stop();}catch(e){}
   document.getElementById('mbn').classList.remove('on');
-  document.getElementById('mbntxt').textContent='PULSA PARA LANZAR HECHIZO';
+  document.getElementById('mbntxt').textContent=G.myTurn?'🎤 TOCA PARA REACTIVAR':'EN ESPERA...';
 }
 function processVoice(text){
   for(const sk of PATHS[G.selectedPath].spells)
@@ -784,6 +788,13 @@ socket.on('turn_change',({turn,spellOrder,castSecs,castDeadline})=>{
   if(castSecs && turn===G.myIndex) startCastTimer(castSecs, castDeadline);
   else { clearInterval(G.castInterval); resetCastTimer(); }
   G.myTurn=turn===G.myIndex;setSpellsDisabled(!G.myTurn);updateTurn();
+  // auto-activate mic when it's your turn
+  if(G.myTurn && !G.counterActive && isVoice()){
+    // small delay so cast timer renders first
+    setTimeout(()=>{
+      if(G.myTurn && !G.listening && !G.counterActive) startListen();
+    }, 400);
+  }
 });
 socket.on('game_over',({winner,xpResult,newProfile})=>{
   const iWon=winner===G.myIndex;
