@@ -262,11 +262,18 @@ io.on('connection', socket => {
     // restore room membership if user reconnects while waiting
     const pendingCode = roomByUser[u];
     if (pendingCode && rooms[pendingCode] && rooms[pendingCode].sockets[1] === null) {
-      rooms[pendingCode].sockets[0] = socket;
+      const room = rooms[pendingCode];
+      // cancel pending delete timeout
+      if (room._deleteTO) {
+        clearTimeout(room._deleteTO);
+        room._deleteTO = null;
+        console.log(`[${INSTANCE_ID}] Cancelled delete timeout for room ${pendingCode} on login`);
+      }
+      room.sockets[0] = socket;
       socket.roomCode = pendingCode;
       socket.playerIndex = 0;
       socket.join(pendingCode);
-      console.log(`[${INSTANCE_ID}] Restored ${u} to room ${pendingCode} after reconnect`);
+      console.log(`[${INSTANCE_ID}] Restored ${u} to room ${pendingCode} after login`);
     }
     socket.emit('auth_ok', publicProfile(rowToProfile(row)));
     console.log('login:', u);
@@ -287,6 +294,12 @@ io.on('connection', socket => {
       const room = rooms[pendingCode];
       const pi = room.state.players.findIndex(p => p.username === u);
       if (pi >= 0) {
+        // cancel pending delete timeout
+        if (room._deleteTO) {
+          clearTimeout(room._deleteTO);
+          room._deleteTO = null;
+          console.log(`[${INSTANCE_ID}] Cancelled delete timeout for room ${pendingCode}`);
+        }
         room.sockets[pi] = socket;
         socket.roomCode = pendingCode;
         socket.playerIndex = pi;
@@ -478,13 +491,16 @@ io.on('connection', socket => {
     // in case it's a brief reconnect (page refresh, mobile browser switching)
     if (room.state.phase === 'battle' && room.sockets.filter(Boolean).length < 2) {
       console.log(`[${INSTANCE_ID}] Room ${code} waiting for grace period before delete`);
-      setTimeout(() => {
-        // only delete if socket hasn't reconnected
-        if (rooms[code] && rooms[code].sockets[pi] === socket) {
+      // store timeout ref so reconnect can cancel it
+      room._deleteTO = setTimeout(() => {
+        if (rooms[code]) {
           console.log(`[${INSTANCE_ID}] Deleting room ${code} after grace period`);
           delete rooms[code];
+          for (const [u, c] of Object.entries(roomByUser)) {
+            if (c === code) delete roomByUser[u];
+          }
         }
-      }, 8000);
+      }, 120000); // 2 minutes grace
       return;
     }
 
@@ -623,16 +639,18 @@ function checkWin(code, room) {
   }
 }
 
-function publicProfile(p) {
+function publicProfile(p, pendingRoom) {
   const level = calcLevel(p.xp);
   const next = xpToNextLevel(p.xp);
   const avatar = p.avatar || '🧙';
+  const pending = pendingRoom || roomByUser[p.username] || null;
   const avgReaction = p.stats.reactionSamples > 0
     ? Math.round(p.stats.totalReactionMs / p.stats.reactionSamples)
     : null;
   return {
     username: p.username,
     avatar,
+    pendingRoom: pending,
     xp: p.xp,
     level: level.n,
     levelName: level.name,
